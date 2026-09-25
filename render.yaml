@@ -1,10 +1,10 @@
 services:
   - type: web
     name: flow-downloader
-    runtime: node
+    runtime: docker
+    dockerfilePath: ./Dockerfile
     plan: free
-    buildCommand: npm ci && npm run setup:media && apt-get update && apt-get install -y ffmpeg && npm run build
-    startCommand: npm start
+    dockerContext: .
     healthCheckPath: /
     envVars:
       - key: NODE_VERSION
