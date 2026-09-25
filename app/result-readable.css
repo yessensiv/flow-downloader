@@ -5,30 +5,33 @@
   letter-spacing: 0.2px;
 }
 
-.media-info {
+.demo-panel .media-info {
   gap: 18px;
+  align-items: center;
 }
 
-.result-thumbnail {
+.demo-panel .result-thumbnail,
+.demo-panel .thumbnail {
   width: 172px;
   height: 97px;
-  flex: 0 0 auto;
+  min-width: 0;
+  flex: 0 0 172px;
   object-fit: cover;
   border-radius: 9px;
 }
 
-.media-category {
+.demo-panel .media-category {
   font-size: 15px;
   letter-spacing: 0.2px;
 }
 
-.media-info h3 {
+.demo-panel .media-info h3 {
   margin: 7px 0;
   font-size: 19px;
   line-height: 1.4;
 }
 
-.media-info p {
+.demo-panel .media-info p {
   font-size: 16px;
   line-height: 1.5;
 }
@@ -56,28 +59,31 @@
     font-size: 14px;
   }
 
-  .media-info {
+  .demo-panel .media-info {
     gap: 12px;
     align-items: flex-start;
   }
 
-  .result-thumbnail {
+  .demo-panel .result-thumbnail,
+  .demo-panel .thumbnail {
     width: 100px;
+    min-width: 100px;
     height: 62px;
+    flex-basis: 100px;
     border-radius: 7px;
   }
 
-  .media-category {
+  .demo-panel .media-category {
     font-size: 13px;
   }
 
-  .media-info h3 {
+  .demo-panel .media-info h3 {
     margin: 5px 0;
     font-size: 16px;
     line-height: 1.4;
   }
 
-  .media-info p {
+  .demo-panel .media-info p {
     font-size: 14px;
   }
 
@@ -93,5 +99,81 @@
   .fps-hint,
   .preview-note {
     font-size: 13px;
+  }
+}
+
+/* The analyzer result has the same hierarchy as the demo, in its own card. */
+.download-card > .demo-panel {
+  margin-top: 24px;
+  padding: 24px;
+  border: 1px solid #343d32;
+  border-radius: 16px;
+  background: #151916;
+}
+
+.download-card > .demo-panel .demo-label {
+  margin-bottom: 18px;
+  font-size: 15px;
+}
+
+.download-card > .demo-panel .media-info {
+  max-width: 900px;
+  min-height: 120px;
+}
+
+.download-card > .demo-panel .result-thumbnail {
+  width: 220px;
+  height: 124px;
+  flex-basis: 220px;
+}
+
+.download-card > .demo-panel .media-category {
+  font-size: 15px;
+}
+
+.download-card > .demo-panel .media-info h3 {
+  max-width: 620px;
+  font-size: 21px;
+  line-height: 1.4;
+}
+
+.download-card > .demo-panel .media-info p {
+  font-size: 16px;
+}
+
+@media (max-width: 560px) {
+  .download-card > .demo-panel {
+    margin-top: 20px;
+    padding: 16px;
+    border-radius: 12px;
+  }
+
+  .download-card > .demo-panel .demo-label {
+    font-size: 14px;
+  }
+
+  .download-card > .demo-panel .media-info {
+    min-height: auto;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .download-card > .demo-panel .result-thumbnail {
+    width: 104px;
+    min-width: 104px;
+    height: 68px;
+    flex-basis: 104px;
+  }
+
+  .download-card > .demo-panel .media-category {
+    font-size: 13px;
+  }
+
+  .download-card > .demo-panel .media-info h3 {
+    font-size: 16px;
+  }
+
+  .download-card > .demo-panel .media-info p {
+    font-size: 14px;
   }
 }
