@@ -1,0 +1,97 @@
+/* Keep result-card typography readable after the legacy global styles. */
+.demo-label {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.media-info {
+  gap: 18px;
+}
+
+.result-thumbnail {
+  width: 172px;
+  height: 97px;
+  flex: 0 0 auto;
+  object-fit: cover;
+  border-radius: 9px;
+}
+
+.media-category {
+  font-size: 15px;
+  letter-spacing: 0.2px;
+}
+
+.media-info h3 {
+  margin: 7px 0;
+  font-size: 19px;
+  line-height: 1.4;
+}
+
+.media-info p {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.options label {
+  font-size: 14px;
+}
+
+.select-wrap select {
+  font-size: 16px;
+}
+
+.result-details,
+.fps-hint {
+  font-size: 15px;
+  line-height: 1.65;
+}
+
+.preview-note {
+  font-size: 14px;
+}
+
+@media (max-width: 560px) {
+  .demo-label {
+    font-size: 14px;
+  }
+
+  .media-info {
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .result-thumbnail {
+    width: 100px;
+    height: 62px;
+    border-radius: 7px;
+  }
+
+  .media-category {
+    font-size: 13px;
+  }
+
+  .media-info h3 {
+    margin: 5px 0;
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  .media-info p {
+    font-size: 14px;
+  }
+
+  .options label {
+    font-size: 13px;
+  }
+
+  .select-wrap select {
+    font-size: 15px;
+  }
+
+  .result-details,
+  .fps-hint,
+  .preview-note {
+    font-size: 13px;
+  }
+}
