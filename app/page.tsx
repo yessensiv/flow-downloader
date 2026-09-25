@@ -11,7 +11,7 @@ const faq = [
   ["Какое качество можно скачать?", "После анализа показываем доступные разрешения до 4K, включая Full HD и 1440p. Список зависит от исходного ролика и формата."],
   ["Можно скачать только музыку?", "Да. Вкладка «Аудио» предусматривает MP3, M4A и WebM. MP3 потребует конвертации; увеличение битрейта не улучшает качество исходного звука."],
   ["Поддерживаются видео с доступом по ссылке?", "В требования включены публичные видео и Unlisted, доступные без входа в аккаунт. Фактическую доступность будет проверять сервер."],
-  ["Скачивание уже работает?", "Сейчас работает анализ ссылки и выбор доступных форматов. Создание и выдача файлов будут подключены на следующем этапе."],
+  ["Скачивание уже работает?", "Да, видео можно подготовить и сохранить со звуком в выбранном качестве. Размер — до 2 ГБ, готовый файл доступен один час. Скачивание отдельного аудио добавим следующим этапом."],
 ];
 
 export default function Home() {
@@ -102,7 +102,7 @@ export default function Home() {
 
         <section className="features" aria-label="Возможности"><article><span className="feature-icon"><Video size={21}/></span><h3>Каждая деталь на месте</h3><p>1080p, 1440p или 4K — выбирай качество, доступное в исходном видео.</p></article><article><span className="feature-icon"><Headphones size={21}/></span><h3>Только то, что звучит</h3><p>Отдельная аудиодорожка для музыки, подкастов и твоих любимых выступлений.</p></article><article><span className="feature-icon"><Zap size={21}/></span><h3>Простой путь к файлу</h3><p>Ссылка, формат, загрузка. Всё нужное в одном месте, на любом экране.</p></article></section>
 
-        <section className="how-section" id="how"><div className="section-heading"><div><span className="section-kicker">НИЧЕГО ЛИШНЕГО</span><h2>Три шага. И оно твоё.</h2></div><span className="outline-icon"><ArrowDown size={22}/></span></div><div className="steps">{[["01", "Скопируй ссылку", "Открой видео или трек на YouTube и скопируй его адрес."], ["02", "Выбери своё", "Укажи формат и доступное качество видео или аудио."], ["03", "Сохрани момент", "Дождись обработки и сохрани готовый файл на устройство."]].map(([n,t,d]) => <article key={n}><span className="step-number">{n}</span><h3>{t}</h3><p>{d}</p></article>)}</div><p className="preview-note"><Disc3 size={15}/> Скачивание файлов скоро появится.</p></section>
+<section className="how-section" id="how"><div className="section-heading"><div><span className="section-kicker">НИЧЕГО ЛИШНЕГО</span><h2>Три шага. И оно твоё.</h2></div><span className="outline-icon"><ArrowDown size={22}/></span></div><div className="steps">{[["01", "Скопируй ссылку", "Открой видео или трек на YouTube и скопируй его адрес."], ["02", "Выбери своё", "Укажи формат и доступное качество видео или аудио."], ["03", "Сохрани момент", "Дождись обработки и сохрани готовый файл на устройство."]].map(([n,t,d]) => <article key={n}><span className="step-number">{n}</span><h3>{t}</h3><p>{d}</p></article>)}</div><p className="preview-note"><Disc3 size={15}/> Видео со звуком уже доступно. Отдельное аудио — следующий этап.</p></section>
 
         <section className="faq-section" id="faq"><div><span className="section-kicker">ЕСТЬ ВОПРОС?</span><h2>Всё по делу.</h2><p>Несколько деталей,<br/>прежде чем начать.</p></div><div className="faq-list">{faq.map(([q,a]) => <details key={q}><summary>{q}<ChevronDown size={17}/></summary><p>{a}</p></details>)}</div></section>
       </main>

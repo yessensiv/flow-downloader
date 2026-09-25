@@ -1,4 +1,12 @@
 /* Keep result-card typography readable after the legacy global styles. */
+.download-action { margin-top: 24px; padding-top: 24px; border-top: 1px solid #343d32; }
+.download-start { min-height: 52px; padding: 14px 22px; font-size: 16px; width: fit-content; }
+.download-start:disabled { opacity: .6; cursor: wait; }
+.download-caption { color: #b6c0b0; font-size: 14px; line-height: 1.6; }
+.download-status { display: grid; gap: 14px; padding: 20px; margin-top: 16px; border-radius: 12px; background: #20281c; font-size: 16px; }
+.download-status span { color: #becbb5; font-size: 14px; line-height: 1.6; }
+.download-status progress { width: 100%; height: 10px; accent-color: #c1f578; }
+@media (max-width: 560px) { .download-start { width: 100%; white-space: normal; } }
 .demo-label {
   font-size: 15px;
   font-weight: 700;

@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { ChevronDown, Settings2 } from 'lucide-react';
 import type { MediaInfo, MediaOption } from '@/lib/media';
+import { DownloadAction } from './download-action';
 
 function codecName(codec:string) {
   if (/^(avc1|avc3|h264)/i.test(codec)) return 'H.264 — лучше совместимость';
@@ -40,7 +41,7 @@ export function MediaResult({media,mode}:{media:MediaInfo;mode:'video'|'audio'})
       {mode === 'video' && variants.length > 1 && <details className="codec-details"><summary><Settings2 size={14}/> Другие варианты кодека <ChevronDown size={14}/></summary><div className="codec-options">{variants.map(o => <label key={o.id}><input type="radio" name={`codec-${media.id}-${group.key}`} checked={choice.id === o.id} onChange={() => setVariant(o.id)}/><span>{codecName(o.codec)}{o.needsMerge ? ' · объединить звук' : ''}</span></label>)}</div></details>}
       <p className="result-details">Размер: {sizeLabel(choice)}{choice.needsMerge ? ' · видео и звук будут объединены' : ''}{choice.conversion ? ' · MP3 через конвертацию' : ''}</p>
       {mode === 'video' && !media.options.some(o => o.fps === 60) && <p className="fps-hint">Для этого видео доступны только показанные значения fps.</p>}
-      <p className="preview-note">Скачивание файла пока не подключено.</p>
+      {mode === 'video' ? <DownloadAction videoId={media.id} optionId={choice.id} label={`${choice.container} · ${group.label}`}/> : <p className="preview-note">Скачивание аудио подключим следующим этапом.</p>}
     </>}
   </div>;
 }
