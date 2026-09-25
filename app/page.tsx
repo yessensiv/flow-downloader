@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { MediaResult } from './media-result';
+import { DownloadAction } from './download-action';
 import type { MediaInfo } from '@/lib/media';
 import { ArrowDown, ArrowDownToLine, ArrowRight, Check, ChevronDown, CircleHelp, Disc3, Headphones, Link2, LoaderCircle, Menu, Music2, Play, ShieldCheck, Sparkles, Video, X, Zap } from "lucide-react";
 import { parseYouTubeUrl } from "@/lib/youtube";
@@ -90,6 +91,7 @@ export default function Home() {
             {notice && <div className="notice" role="status"><CircleHelp size={18}/><span>{notice}</span></div>}
             {loading && <div className="analysis-loading" role="status"><LoaderCircle className="flow-spinner" size={26}/><div><strong>Находим ваше видео</strong><p>Проверяем доступное качество и звук. Обычно это несколько секунд.</p></div></div>}
             {media && <MediaResult key={`${media.id}:${mode}`} media={media} mode={mode}/>}
+            {!media && <DownloadAction restoreOnly/>}
             {demo && <div className="demo-panel">
               <div className="demo-label"><Sparkles size={13}/> Пример результата · для знакомства</div>
               <div className="media-info"><div className="thumbnail"><div className="sun"/><div className="mountain back"/><div className="mountain"/><Play size={22} fill="currentColor"/><span>04:32</span></div><div><span className="media-category">NATURE & SOUND</span><h3>Маленькое путешествие. Большие впечатления.</h3><p>Пример видео · 4 минуты · до 4K</p></div></div>

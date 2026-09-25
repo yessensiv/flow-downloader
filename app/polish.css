@@ -1,4 +1,11 @@
 /* Final interface layer: type hierarchy, interaction and reduced motion. */
+.download-steps { display: grid; grid-template-columns: repeat(4, 1fr); list-style: none; margin: 24px 0 16px; padding: 0; gap: 8px; }
+.download-steps li { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #9da994; font-size: 12px; }
+.download-steps li > span { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #45513c; border-radius: 50%; }
+.download-steps .current { color: #eaf7df; font-weight: 700; }
+.download-steps .current > span { background: #c1f578; color: #182310; border-color: #c1f578; }
+.download-steps .complete > span { color: #c1f578; background: #28371e; }
+.cancel-download { margin-top: 16px; padding: 12px 18px; min-height: 44px; font-size: 14px; }
 body { font-size: 16px; }
 .hero-description { font-size: 17px; line-height: 1.8; color: #b6bfb2; }
 .download-card { max-width: 850px; padding: 28px 28px 0; }

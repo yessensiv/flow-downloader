@@ -1,5 +1,6 @@
-import { execFile } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 import path from 'node:path';
+import { stopProcessTree } from './process-tree';
 import { normalizeMedia, type RawInfo } from './media';
 
 export class AnalysisError extends Error {
@@ -13,19 +14,32 @@ export function classifyError(stderr: string): AnalysisError {
   return new AnalysisError('UPSTREAM_ERROR', 'Не удалось получить форматы с YouTube. Попробуйте позже или другую ссылку.');
 }
 // Isolated child process for local MVP. Move behind a queue for multi-instance deployment.
-export async function analyzeVideo(id: string, signal?: AbortSignal) {
+export async function analyzeVideo(id: string, signal?: AbortSignal, onProcess?: (child: ChildProcess) => void) {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) throw new AnalysisError('INVALID_URL', 'Некорректный идентификатор видео.',400);
   const binary = process.env.YTDLP_PATH || path.join(process.cwd(), '.tools', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
-  const raw = await new Promise<RawInfo>((resolve,reject) => {
-    execFile(binary, ['--ignore-config','--no-playlist','--skip-download','--dump-single-json','--no-progress','--no-warnings','--no-cache-dir','--no-js-runtimes','--js-runtimes',`node:${process.execPath}`,'--socket-timeout','15','--retries','1','--extractor-retries','1','--',`https://www.youtube.com/watch?v=${id}`],
-      {timeout:60000,maxBuffer:8*1024*1024,windowsHide:true,signal}, (error,stdout,stderr) => {
-        if (error) {
-          if ('code' in error && error.code === 'ENOENT') return reject(new AnalysisError('NOT_CONFIGURED','Обработчик видео ещё не установлен на сервере.',503));
-          if (error.killed || error.name === 'AbortError') return reject(new AnalysisError('TIMEOUT','Анализ занял слишком много времени. Попробуйте ещё раз.',504));
-          return reject(classifyError(stderr));
-        }
-        try { resolve(JSON.parse(stdout)); } catch { reject(new AnalysisError('INVALID_RESPONSE','YouTube вернул некорректные данные. Попробуйте позже.')); }
-      });
+  const raw = await new Promise<RawInfo>((resolve, reject) => {
+    if (signal?.aborted) { reject(new AnalysisError('TIMEOUT', 'Запрос отменён.', 499)); return; }
+    const child = spawn(binary, ['--ignore-config','--no-playlist','--skip-download','--dump-single-json','--no-progress','--no-warnings','--no-cache-dir','--no-js-runtimes','--js-runtimes',`node:${process.execPath}`,'--socket-timeout','15','--retries','1','--extractor-retries','1','--',`https://www.youtube.com/watch?v=${id}`], { windowsHide: true, detached: process.platform !== 'win32' });
+    let output = ''; let stderr = ''; let bytes = 0; let failure: Error | undefined;
+    const stop = () => { void stopProcessTree(child).catch(() => {}); };
+    const abort = () => { failure = new AnalysisError('TIMEOUT', 'Запрос отменён.', 499); stop(); };
+    const timeout = setTimeout(() => { failure = new AnalysisError('TIMEOUT', 'Анализ занял слишком много времени. Попробуйте ещё раз.', 504); stop(); }, 60_000);
+    signal?.addEventListener('abort', abort, { once: true });
+    child.stdout.setEncoding('utf8');
+    child.stdout.on('data', chunk => {
+      bytes += Buffer.byteLength(chunk);
+      if (bytes > 8 * 1024 * 1024) { failure = new AnalysisError('INVALID_RESPONSE', 'Ответ источника слишком большой.'); stop(); return; }
+      output += chunk.toString();
+    });
+    child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8192); });
+    child.on('error', () => { failure = new AnalysisError('NOT_CONFIGURED', 'Обработчик видео ещё не установлен на сервере.', 503); });
+    child.on('close', code => {
+      clearTimeout(timeout); signal?.removeEventListener('abort', abort);
+      if (failure) return reject(failure);
+      if (code !== 0) return reject(classifyError(stderr));
+      try { resolve(JSON.parse(output)); } catch { reject(new AnalysisError('INVALID_RESPONSE', 'YouTube вернул некорректные данные. Попробуйте позже.')); }
+    });
+    onProcess?.(child);
   });
   if (raw.is_live || raw.live_status === 'is_upcoming' || raw.live_status === 'post_live') throw new AnalysisError('LIVE','Дождитесь завершения трансляции и обработки записи.',422);
   const media = normalizeMedia(raw,id);
