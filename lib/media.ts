@@ -46,5 +46,6 @@ export function normalizeMedia(raw: RawInfo, id: string): MediaInfo {
   const bestAudio = audio.sort((a,b) => (b.abr ?? b.tbr ?? 0) - (a.abr ?? a.tbr ?? 0))[0];
   if (bestAudio) for (const bitrate of [320,256,192,128]) options.push({id:`${bestAudio.format_id}:mp3:${bitrate}`,kind:'audio',container:'MP3',label:`${bitrate} kbps · конвертация`,codec:'MP3',fps:null,height:null,size:null,approximate:true,needsMerge:false,conversion:true});
   options.sort((a,b) => (b.height ?? 0) - (a.height ?? 0) || (b.fps ?? 0) - (a.fps ?? 0));
-  return {id,title:raw.title || 'Видео YouTube',channel:raw.channel || raw.uploader || 'YouTube',duration:number(raw.duration),thumbnail:`https://i.ytimg.com/vi/${id}/hqdefault.jpg`,options};
+  const unique = [...new Map(options.map(option => [option.kind === 'video' ? `${option.kind}:${option.container}:${option.height}:${option.fps}:${option.codec}` : `${option.kind}:${option.container}:${option.codec}:${option.label}`, option])).values()];
+  return {id,title:raw.title || 'Видео YouTube',channel:raw.channel || raw.uploader || 'YouTube',duration:number(raw.duration),thumbnail:`https://i.ytimg.com/vi/${id}/hqdefault.jpg`,options:unique};
 }
