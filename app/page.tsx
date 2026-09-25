@@ -3,14 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { MediaResult } from './media-result';
 import type { MediaInfo } from '@/lib/media';
-import { ArrowDown, ArrowDownToLine, ArrowRight, Check, ChevronDown, CircleHelp, Disc3, Headphones, Link2, Menu, Music2, Play, ShieldCheck, Sparkles, Video, X, Zap } from "lucide-react";
+import { ArrowDown, ArrowDownToLine, ArrowRight, Check, ChevronDown, CircleHelp, Disc3, Headphones, Link2, LoaderCircle, Menu, Music2, Play, ShieldCheck, Sparkles, Video, X, Zap } from "lucide-react";
 import { parseYouTubeUrl } from "@/lib/youtube";
 
 const videoQualities = ["2160p · 4K", "1440p · 2K", "1080p · Full HD", "720p · HD", "480p", "360p"];
 const faq = [
   ["Какое качество можно скачать?", "После анализа показываем доступные разрешения до 4K, включая Full HD и 1440p. Список зависит от исходного ролика и формата."],
-  ["Можно скачать только музыку?", "Да. Вкладка «Аудио» предусматривает MP3, M4A и WebM. MP3 потребует конвертации; увеличение битрейта не улучшает качество исходного звука."],
-  ["Поддерживаются видео с доступом по ссылке?", "В требования включены публичные видео и Unlisted, доступные без входа в аккаунт. Фактическую доступность будет проверять сервер."],
+  ["Можно скачать только музыку?", "Пока можно посмотреть доступные аудиоформаты. Скачивание музыки в M4A и MP3 появится следующим этапом."],
+  ["Поддерживаются видео с доступом по ссылке?", "Да, если ролик открывается по ссылке без входа в аккаунт. Приватные видео и ролики с требованием авторизации не поддерживаются."],
   ["Скачивание уже работает?", "Да, видео можно подготовить и сохранить со звуком в выбранном качестве. Размер — до 2 ГБ, готовый файл доступен один час. Скачивание отдельного аудио добавим следующим этапом."],
 ];
 
@@ -77,7 +77,7 @@ export default function Home() {
           <p className="hero-description">Сохраняй любимое с YouTube в нужном формате.<br/>От музыки в наушниках до видео в 4K на большом экране.</p>
 
           <div className="download-card">
-            <div className="card-top"><div className="tabs" role="tablist" aria-label="Тип загрузки">
+            <div className="card-top"><div className="tabs" data-mode={mode} role="tablist" aria-label="Тип загрузки">
               <button role="tab" aria-selected={mode === "video"} className={mode === "video" ? "active" : ""} onClick={() => changeMode("video")}><Video size={17}/> Видео</button>
               <button role="tab" aria-selected={mode === "audio"} className={mode === "audio" ? "active" : ""} onClick={() => changeMode("audio")}><Music2 size={17}/> Аудио</button>
             </div><span className="supported">YouTube <span>+ YouTube Music</span></span></div>
@@ -88,19 +88,19 @@ export default function Home() {
             </form>
             <div className="input-hint"><span><ShieldCheck size={14}/> Открытые видео и ролики по ссылке</span><button onClick={showDemo}>Посмотреть пример <ArrowRight size={13}/></button></div>
             {notice && <div className="notice" role="status"><CircleHelp size={18}/><span>{notice}</span></div>}
-            {loading && <p className="preview-note" role="status">Получаем название, доступное качество и аудиодорожки. Обычно это занимает несколько секунд.</p>}
+            {loading && <div className="analysis-loading" role="status"><LoaderCircle className="flow-spinner" size={26}/><div><strong>Находим ваше видео</strong><p>Проверяем доступное качество и звук. Обычно это несколько секунд.</p></div></div>}
             {media && <MediaResult key={`${media.id}:${mode}`} media={media} mode={mode}/>}
             {demo && <div className="demo-panel">
-              <div className="demo-label"><Sparkles size={13}/> ДЕМОПРИМЕР · НЕ ДАННЫЕ ВВЕДЁННОЙ ССЫЛКИ</div>
+              <div className="demo-label"><Sparkles size={13}/> Пример результата · для знакомства</div>
               <div className="media-info"><div className="thumbnail"><div className="sun"/><div className="mountain back"/><div className="mountain"/><Play size={22} fill="currentColor"/><span>04:32</span></div><div><span className="media-category">NATURE & SOUND</span><h3>Маленькое путешествие. Большие впечатления.</h3><p>Пример видео · 4 минуты · до 4K</p></div></div>
-              <div className="options"><label>Формат<div className="select-wrap"><select value={format} onChange={e => {setFormat(e.target.value); if(mode === "audio") setQuality(e.target.value === "MP3" ? "320 kbps" : "Исходное качество");}}>{(mode === "video" ? ["MP4", "WebM"] : ["MP3", "M4A", "WebM"]).map(f => <option key={f}>{f}</option>)}</select><ChevronDown size={16}/></div></label><label>Качество<div className="select-wrap"><select value={quality} onChange={e => setQuality(e.target.value)}>{(mode === "video" ? videoQualities : format === "MP3" ? ["320 kbps", "256 kbps", "192 kbps", "128 kbps"] : ["Исходное качество"]).map(q => <option key={q}>{q}</option>)}</select><ChevronDown size={16}/></div></label><button className="prepare-button" onClick={() => setNotice(`Выбрано: ${format}, ${quality}. Это демонстрация интерфейса; создание файла пока не подключено.`)}><ArrowDownToLine size={18}/> Выбрать</button></div>
+              <div className="options"><label>Формат<div className="select-wrap"><select value={format} onChange={e => {setFormat(e.target.value); if(mode === "audio") setQuality(e.target.value === "MP3" ? "320 kbps" : "Исходное качество");}}>{(mode === "video" ? ["MP4", "WebM"] : ["MP3", "M4A", "WebM"]).map(f => <option key={f}>{f}</option>)}</select><ChevronDown size={16}/></div></label><label>Качество<div className="select-wrap"><select value={quality} onChange={e => setQuality(e.target.value)}>{(mode === "video" ? videoQualities : format === "MP3" ? ["320 kbps", "256 kbps", "192 kbps", "128 kbps"] : ["Исходное качество"]).map(q => <option key={q}>{q}</option>)}</select><ChevronDown size={16}/></div></label><button className="prepare-button" onClick={() => setNotice(`Выбрано: ${format}, ${quality}. Это пример. Вставьте свою ссылку выше, чтобы скачать настоящее видео.`)}><ArrowDownToLine size={18}/> Выбрать</button></div>
             </div>}
             <div className="card-footer"><span><Check size={13}/> Без регистрации</span><span><Check size={13}/> Видео и аудио</span><span><Check size={13}/> До 4K</span></div>
           </div>
           <div className="format-strip"><span>В ТВОЁМ ФОРМАТЕ</span><b>MP4</b><b>WEBM</b><b>MP3</b><b>M4A</b><i/><b className="quality-badge">4K <small>ULTRA HD</small></b></div>
         </section>
 
-        <section className="features" aria-label="Возможности"><article><span className="feature-icon"><Video size={21}/></span><h3>Каждая деталь на месте</h3><p>1080p, 1440p или 4K — выбирай качество, доступное в исходном видео.</p></article><article><span className="feature-icon"><Headphones size={21}/></span><h3>Только то, что звучит</h3><p>Отдельная аудиодорожка для музыки, подкастов и твоих любимых выступлений.</p></article><article><span className="feature-icon"><Zap size={21}/></span><h3>Простой путь к файлу</h3><p>Ссылка, формат, загрузка. Всё нужное в одном месте, на любом экране.</p></article></section>
+        <section className="features" aria-label="Возможности"><article><span className="feature-icon"><Video size={21}/></span><h3>Каждая деталь на месте</h3><p>1080p, 1440p или 4K — выбирай качество, доступное в исходном видео.</p></article><article><span className="feature-icon"><Headphones size={21}/></span><h3>Только то, что звучит</h3><p>Музыка и подкасты без видео. Скачивание отдельного аудио — скоро.</p></article><article><span className="feature-icon"><Zap size={21}/></span><h3>Простой путь к файлу</h3><p>Ссылка, формат, загрузка. Всё нужное в одном месте, на любом экране.</p></article></section>
 
 <section className="how-section" id="how"><div className="section-heading"><div><span className="section-kicker">НИЧЕГО ЛИШНЕГО</span><h2>Три шага. И оно твоё.</h2></div><span className="outline-icon"><ArrowDown size={22}/></span></div><div className="steps">{[["01", "Скопируй ссылку", "Открой видео или трек на YouTube и скопируй его адрес."], ["02", "Выбери своё", "Укажи формат и доступное качество видео или аудио."], ["03", "Сохрани момент", "Дождись обработки и сохрани готовый файл на устройство."]].map(([n,t,d]) => <article key={n}><span className="step-number">{n}</span><h3>{t}</h3><p>{d}</p></article>)}</div><p className="preview-note"><Disc3 size={15}/> Видео со звуком уже доступно. Отдельное аудио — следующий этап.</p></section>
 

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import "./result-readable.css";
+import "./polish.css";
 
 export const metadata: Metadata = {
   title: "Flow — видео и музыка в твоём ритме",

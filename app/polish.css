@@ -1,0 +1,81 @@
+/* Final interface layer: type hierarchy, interaction and reduced motion. */
+body { font-size: 16px; }
+.hero-description { font-size: 17px; line-height: 1.8; color: #b6bfb2; }
+.download-card { max-width: 850px; padding: 28px 28px 0; }
+.download-card .input-label { font-size: 15px; font-weight: 600; margin-bottom: 12px; }
+.download-card .input-hint, .download-card .input-hint button { font-size: 13px; line-height: 1.6; color: #b3c0a7; }
+.download-card .card-footer { font-size: 12px; line-height: 1.5; flex-wrap: wrap; gap: 12px 24px; }
+.download-card .supported { font-size: 12px; }
+.download-card .url-field input { font-size: 16px; height: 60px; }
+.download-card .primary-button { font-size: 15px; }
+.download-card .url-summary { height: 60px; }
+.download-card .url-summary > span:first-child { font-size: 16px; }
+.download-card .url-summary-state { font-size: 13px; }
+.download-card .tabs { position: relative; isolation: isolate; display: grid; grid-template-columns: 1fr 1fr; gap: 0; }
+.download-card .tabs::before { content: ''; position: absolute; z-index: -1; inset: 4px auto 4px 4px; width: calc((100% - 8px) / 2); background: #34432a; border-radius: 7px; transition: transform 280ms cubic-bezier(.22,1,.36,1); }
+.download-card .tabs[data-mode='audio']::before { transform: translateX(100%); }
+.download-card .tabs button { font-size: 15px; justify-content: center; min-height: 44px; padding: 10px 18px; background: transparent; }
+.download-card .tabs button.active { background: transparent; }
+button, a, input, select, summary, .url-field { transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, box-shadow 180ms ease, transform 180ms ease; }
+.url-field:focus-within { box-shadow: 0 0 0 3px #c1f57815; }
+.select-wrap select { min-height: 50px; }
+.select-wrap select:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.download-card .codec-details summary, .download-card .codec-options label { font-size: 14px; line-height: 1.6; }
+.download-card .codec-details summary { padding: 14px 0; }
+.download-card .codec-explanation { font-size: 14px; line-height: 1.65; color: #b5bfaf; margin: 0 0 8px; }
+.demo-panel .fps-hint { font-size: 14px; color: #aebaa6; }
+.demo-panel .result-details { color: #d1dbc9; }
+.result-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px #c1f5780e; margin-right: 5px; }
+.download-card > .demo-panel { animation: flow-enter 360ms cubic-bezier(.22,1,.36,1) both; }
+.analysis-loading { display: flex; align-items: center; gap: 16px; padding: 24px; margin-top: 24px; border: 1px solid #394332; border-radius: 14px; background: #181f15; animation: flow-enter 250ms ease both; }
+.analysis-loading > svg { color: var(--accent); flex-shrink: 0; }
+.analysis-loading strong { font-size: 17px; }
+.analysis-loading p { font-size: 14px; line-height: 1.65; color: #bac5b2; margin: 6px 0 0; }
+.flow-spinner { animation: flow-spin 1.2s linear infinite; flex-shrink: 0; }
+.download-status, .notice, .error { animation: flow-enter 260ms ease both; }
+.status-heading { display: flex; align-items: center; gap: 10px; animation: flow-enter 220ms ease both; }
+.status-heading svg { color: var(--accent); flex-shrink: 0; }
+.status-ready { border: 1px solid #647e43; background: #202c19; }
+.status-error { border: 1px solid #754b41; background: #291f1b; }
+.secondary-button { display: inline-flex; justify-content: center; align-items: center; gap: 10px; border: 1px solid #45523b; border-radius: 9px; background: transparent; color: #c3ceb9; cursor: pointer; }
+.download-status progress { border: none; border-radius: 10px; overflow: hidden; background: #394431; }
+.download-status progress::-webkit-progress-bar { background: #394431; border-radius: 10px; }
+.download-status progress::-webkit-progress-value { background: #c1f578; border-radius: 10px; transition: width 500ms ease; }
+.download-status progress::-moz-progress-bar { background: #c1f578; border-radius: 10px; }
+.codec-details[open] .codec-options, .faq-list details[open] p { animation: flow-enter 220ms ease both; }
+summary svg { transition: transform 220ms ease; }
+.codec-details[open] summary svg:first-child { transform: none; }
+.features h3, .steps h3 { font-size: 17px; }
+.features p, .steps p, .faq-list summary, .faq-list details p { font-size: 15px; line-height: 1.75; }
+.nav { font-size: 14px; }
+.header-label { font-size: 12px; }
+.format-strip > span { font-size: 10px; }
+.section-kicker { font-size: 11px; }
+.faq-section > div > p { font-size: 15px; }
+@media (hover: hover) {
+  .primary-button:not(:disabled):hover { transform: translateY(-2px); box-shadow: 0 6px 20px #b0e56820; }
+  .secondary-button:hover, .select-wrap select:hover { border-color: #8aab67; }
+  .input-hint button:hover, .nav a:hover { color: #c1f578; }
+}
+.primary-button:not(:disabled):active, .secondary-button:active { transform: translateY(0) scale(.98); }
+@keyframes flow-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes flow-spin { to { transform: rotate(360deg); } }
+@media (max-width: 560px) {
+  .download-card { padding: 20px 16px 0; }
+  .hero-description { font-size: 15px; }
+  .download-card .tabs button { padding: 10px 14px; font-size: 14px; }
+  .download-card .supported { font-size: 11px; }
+  .download-card .primary-button { min-height: 50px; }
+  .download-card .card-footer { font-size: 12px; gap: 10px 16px; }
+  .analysis-loading { padding: 18px 16px; }
+  .download-card > .demo-panel .media-info { flex-direction: column; gap: 16px; }
+  .download-card > .demo-panel .result-thumbnail { width: 100%; height: auto; aspect-ratio: 16 / 9; min-width: 0; flex-basis: auto; object-fit: cover; }
+  .download-card > .demo-panel .media-info h3 { font-size: 20px; line-height: 1.4; }
+  .download-card > .demo-panel .media-category { font-size: 14px; }
+  .download-card .result-options label { font-size: 14px; }
+  .download-card .result-options select { font-size: 16px; }
+  .download-status { padding: 16px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+}
