@@ -25,8 +25,11 @@ export default function Home() {
   const [menu, setMenu] = useState(false);
   const [media,setMedia] = useState<MediaInfo | null>(null);
   const [loading,setLoading] = useState(false);
+  const [urlFocused,setUrlFocused] = useState(false);
   const pending = useRef<AbortController | null>(null);
+  const urlInput = useRef<HTMLInputElement>(null);
   useEffect(() => () => pending.current?.abort(), []);
+  useEffect(() => { if (urlFocused) urlInput.current?.focus(); }, [urlFocused]);
   function resetResult() {
     pending.current?.abort(); pending.current = null;
     setLoading(false); setMedia(null); setDemo(false); setError(''); setNotice('');
@@ -80,7 +83,7 @@ export default function Home() {
             </div><span className="supported">YouTube <span>+ YouTube Music</span></span></div>
             <form onSubmit={analyze} noValidate>
               <label className="input-label" htmlFor="video-url">Ссылка на видео</label>
-              <div className="url-row"><div className={`url-field ${error ? "invalid" : ""}`}><Link2 size={20}/><input id="video-url" type="url" value={url} onChange={e => { resetResult(); setUrl(e.target.value); }} placeholder="Вставь ссылку с YouTube сюда" aria-invalid={!!error} aria-describedby={error ? "url-error" : undefined}/>{url && <button type="button" className="icon-button" aria-label="Очистить ссылку" onClick={() => { resetResult(); setUrl(''); }}><X size={16}/></button>}</div><button className="primary-button" type="submit" disabled={loading}>{loading ? 'Анализируем…' : 'Найти видео'} <ArrowRight size={18}/></button></div>
+              <div className={`url-row ${url && !urlFocused ? 'url-row-filled' : ''}`}><div className={`url-field ${error ? "invalid" : ""} ${url && !urlFocused ? "url-filled" : ""}`}><Link2 size={20}/>{url && !urlFocused ? <button type="button" className="url-summary" onClick={() => setUrlFocused(true)} aria-label={`Изменить ссылку: ${url}`}><span>{url.includes('youtu.be') ? 'youtu.be' : url.includes('music.youtube.com') ? 'YouTube Music' : 'youtube.com'}</span><span className="url-summary-state"><Check size={14}/> Ссылка добавлена</span></button> : <input ref={urlInput} id="video-url" type="url" value={url} onFocus={() => setUrlFocused(true)} onBlur={() => setUrlFocused(false)} onChange={e => { resetResult(); setUrl(e.target.value); }} placeholder="Вставь ссылку с YouTube сюда" aria-invalid={!!error} aria-describedby={error ? "url-error" : undefined}/ >}{url && <button type="button" className="icon-button" aria-label="Очистить ссылку" onClick={() => { resetResult(); setUrl(''); setUrlFocused(true); }}><X size={16}/></button>}</div><button className="primary-button" type="submit" disabled={loading}>{loading ? 'Анализируем…' : 'Найти видео'} <ArrowRight size={18}/></button></div>
               {error && <p id="url-error" role="alert" className="error">{error}</p>}
             </form>
             <div className="input-hint"><span><ShieldCheck size={14}/> Публичные видео и доступ по ссылке</span><button onClick={showDemo}>Посмотреть пример <ArrowRight size={13}/></button></div>
