@@ -1,9 +1,12 @@
 import { parseYouTubeUrl } from '@/lib/youtube';
 import { analyzeVideo, AnalysisError } from '@/lib/analyzer';
+import { rateLimit } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
 let active = 0;
 const headers = { 'Cache-Control':'no-store' };
 export async function POST(request: Request) {
+  const limited = rateLimit('analyze');
+  if (limited) return limited;
   const origin = request.headers.get('origin');
   if (origin) {
     let sameOrigin = false;

@@ -14,9 +14,12 @@ export function classifyError(stderr: string): AnalysisError {
   return new AnalysisError('UPSTREAM_ERROR', 'Не удалось получить форматы с YouTube. Попробуйте позже или другую ссылку.');
 }
 // Isolated child process for local MVP. Move behind a queue for multi-instance deployment.
+const analyzerState = globalThis as typeof globalThis & { flowAnalyzers?: number };
 export async function analyzeVideo(id: string, signal?: AbortSignal, onProcess?: (child: ChildProcess) => void) {
   if (!/^[a-zA-Z0-9_-]{11}$/.test(id)) throw new AnalysisError('INVALID_URL', 'Некорректный идентификатор видео.',400);
   const binary = process.env.YTDLP_PATH || path.join(process.cwd(), '.tools', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
+  if ((analyzerState.flowAnalyzers || 0) >= 2) throw new AnalysisError('BUSY', 'Сервис проверяет другие ссылки. Попробуйте чуть позже.', 429);
+  analyzerState.flowAnalyzers = (analyzerState.flowAnalyzers || 0) + 1;
   const raw = await new Promise<RawInfo>((resolve, reject) => {
     if (signal?.aborted) { reject(new AnalysisError('TIMEOUT', 'Запрос отменён.', 499)); return; }
     const child = spawn(binary, ['--ignore-config','--no-playlist','--skip-download','--dump-single-json','--no-progress','--no-warnings','--no-cache-dir','--no-js-runtimes','--js-runtimes',`node:${process.execPath}`,'--socket-timeout','15','--retries','1','--extractor-retries','1','--',`https://www.youtube.com/watch?v=${id}`], { windowsHide: true, detached: process.platform !== 'win32' });
@@ -40,7 +43,7 @@ export async function analyzeVideo(id: string, signal?: AbortSignal, onProcess?:
       try { resolve(JSON.parse(output)); } catch { reject(new AnalysisError('INVALID_RESPONSE', 'YouTube вернул некорректные данные. Попробуйте позже.')); }
     });
     onProcess?.(child);
-  });
+  }).finally(() => { analyzerState.flowAnalyzers!--; });
   if (raw.is_live || raw.live_status === 'is_upcoming' || raw.live_status === 'post_live') throw new AnalysisError('LIVE','Дождитесь завершения трансляции и обработки записи.',422);
   const media = normalizeMedia(raw,id);
   if (!media.options.length) throw new AnalysisError('NO_FORMATS','Подходящие видео- или аудиоформаты не найдены.',422);

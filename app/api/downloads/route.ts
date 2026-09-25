@@ -1,8 +1,11 @@
 import { createDownload } from '@/lib/downloads';
 import { AnalysisError } from '@/lib/analyzer';
 import { validOptionId } from '@/lib/download-format';
+import { rateLimit } from '@/lib/rate-limit';
 export const runtime = 'nodejs';
 export async function POST(request: Request) {
+  const limited = rateLimit('download');
+  if (limited) return limited;
   const headers = { 'Cache-Control': 'no-store' };
   const origin = request.headers.get('origin');
   let sameOrigin = false;
@@ -16,6 +19,6 @@ export async function POST(request: Request) {
     while (true) { const { done, value } = await reader.read(); if (done) break; size += value.length; if (size > 4096) { await reader.cancel(); return Response.json({ error: 'Слишком большой запрос.' }, { status: 413, headers }); } chunks.push(value); }
     const body = JSON.parse(Buffer.concat(chunks).toString());
     if (typeof body?.videoId !== 'string' || !/^[\w-]{11}$/.test(body.videoId) || !validOptionId(body.optionId)) throw new Error();
-    return Response.json(createDownload(body.videoId, body.optionId), { status: 202, headers });
+    return Response.json(await createDownload(body.videoId, body.optionId), { status: 202, headers });
   } catch (error) { return Response.json({ error: error instanceof AnalysisError ? error.message : 'Некорректный запрос на скачивание.' }, { status: error instanceof AnalysisError ? error.status : 400, headers }); }
 }

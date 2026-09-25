@@ -6,13 +6,15 @@ import { analyzeVideo, AnalysisError, classifyError } from './analyzer';
 import { downloadFormat } from './download-format';
 import { stopProcessTree } from './process-tree';
 import { trackProgress } from './download-progress';
+import { storageUsage, storageFits, jobReservation, storageLimit, GiB } from './storage-budget';
 
 const root = path.join(process.cwd(), '.downloads');
 const ttl = 60 * 60 * 1000;
 const limit = 2 * 1024 ** 3;
 type Job = { id: string; state: 'cancelled' | 'cancelling' | 'checking' | 'downloading' | 'merging' | 'converting' | 'ready' | 'error'; progress: number | null; title?: string; error?: string; file?: string; mime?: string; ext?: string; kind?: 'video' | 'audio'; size?: number; expires: number; readers: number; cancelRequested?: boolean; stop?: () => Promise<void>; done?: Promise<void> };
-const shared = globalThis as typeof globalThis & { flowDownloads?: Map<string, Job>; flowCleanup?: ReturnType<typeof setInterval> };
+const shared = globalThis as typeof globalThis & { flowDownloads?: Map<string, Job>; flowCleanup?: ReturnType<typeof setInterval>; flowAdmission?: Promise<void>; flowReservations?: Set<string> };
 const jobs = shared.flowDownloads ??= new Map<string, Job>();
+const reservations = shared.flowReservations ??= new Set<string>();
 export function getJob(id: string) { return jobs.get(id); }
 export function jobView(job: Job) { return { id: job.id, state: job.state, progress: job.progress, title: job.title, error: job.error, kind: job.kind, size: job.size, expires: job.expires }; }
 async function cleanup() {
@@ -37,13 +39,24 @@ if (!shared.flowCleanup) {
   shared.flowCleanup = setInterval(() => { void cleanup().catch(() => {}); }, 60_000);
   shared.flowCleanup.unref();
 }
-export function createDownload(videoId: string, optionId: string) {
-  if ([...jobs.values()].filter(j => !['ready', 'error', 'cancelled'].includes(j.state)).length >= 2)
-    throw new AnalysisError('BUSY', 'Уже готовим два файла. Попробуйте немного позже.', 429);
-  const job: Job = { id: randomUUID(), state: 'checking', progress: null, expires: Date.now() + ttl, readers: 0 };
-  jobs.set(job.id, job);
-  job.done = run(job, videoId, optionId);
-  return jobView(job);
+export async function createDownload(videoId: string, optionId: string) {
+  const previous = shared.flowAdmission ?? Promise.resolve();
+  let release!: () => void;
+  shared.flowAdmission = new Promise<void>(resolve => { release = resolve; });
+  await previous;
+  try {
+    await cleanup();
+    if ([...jobs.values()].filter(j => !['ready', 'error', 'cancelled'].includes(j.state)).length >= 2)
+      throw new AnalysisError('BUSY', 'Уже готовим два файла. Попробуйте немного позже.', 429);
+    const usage = await storageUsage(root).catch(() => { throw new AnalysisError('STORAGE_UNAVAILABLE', 'Не удалось проверить свободное место. Попробуйте позже.', 503); });
+    const remaining = [...reservations].reduce((sum, id) => sum + Math.max(0, jobReservation - (usage.sizes.get(id) || 0)), 0);
+    if (!storageFits(usage.used, remaining, usage.free)) throw new AnalysisError('STORAGE_FULL', 'Недостаточно свободного места для нового файла. Попробуйте позже.', 503);
+    const job: Job = { id: randomUUID(), state: 'checking', progress: null, expires: Date.now() + ttl, readers: 0 };
+    jobs.set(job.id, job);
+    reservations.add(job.id);
+    job.done = run(job, videoId, optionId);
+    return jobView(job);
+  } finally { release(); }
 }
 async function run(job: Job, videoId: string, optionId: string) {
   const dir = path.join(root, job.id);
@@ -74,11 +87,18 @@ async function run(job: Job, videoId: string, optionId: string) {
       let pending = '';
       const parts = new Map<string, number>();
       const timeout = setTimeout(() => { failure = new Error('Подготовка заняла больше 30 минут. Попробуйте качество ниже.'); void stopProcessTree(child).catch(() => {}); }, 30 * 60_000);
-      const quota = setInterval(() => { void (async () => {
-        const files = await readdir(dir);
-        const sizes = await Promise.all(files.map(f => stat(path.join(dir, f)).then(s => s.size).catch(() => 0)));
-        if (sizes.reduce((a,b) => a+b, 0) > limit * 2) { failure = new Error('Превышен лимит временных файлов. Выберите качество ниже.'); void stopProcessTree(child).catch(() => {}); }
-      })().catch(() => {}); }, 2000);
+      let checkingQuota = false;
+      const quota = setInterval(() => {
+        if (checkingQuota) return;
+        checkingQuota = true;
+        void (async () => {
+          const usage = await storageUsage(root);
+          if ((usage.sizes.get(job.id) || 0) > jobReservation || usage.used > storageLimit || usage.free < GiB / 2) {
+            failure = new Error('Недостаточно места для продолжения. Выберите качество ниже или попробуйте позже.');
+            await stopProcessTree(child);
+          }
+        })().catch(() => { failure = new Error('Не удалось проверить свободное место. Повторите попытку позже.'); void stopProcessTree(child).catch(() => {}); }).finally(() => { checkingQuota = false; });
+      }, 2000);
       child.stdout.on('data', chunk => {
         if (job.cancelRequested) return;
         pending += chunk.toString();
@@ -104,7 +124,7 @@ async function run(job: Job, videoId: string, optionId: string) {
     job.state = job.cancelRequested ? 'cancelled' : 'error'; job.progress = null;
     job.error = job.cancelRequested ? undefined : error instanceof Error ? error.message : 'Не удалось подготовить файл.';
     await rm(dir, { recursive: true, force: true }).catch(() => {});
-  } finally { job.stop = undefined; job.expires = Date.now() + ttl; }
+  } finally { reservations.delete(job.id); job.stop = undefined; job.expires = Date.now() + ttl; }
 }
 export async function cancelDownload(id: string) {
   const job = jobs.get(id);
