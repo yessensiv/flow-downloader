@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: flow-downloader
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run setup:media && apt-get update && apt-get install -y ffmpeg && npm run build
+    startCommand: npm start
+    healthCheckPath: /
+    envVars:
+      - key: NODE_VERSION
+        value: 24

@@ -2,7 +2,7 @@
   "name": "flow-downloader",
   "version": "0.1.0",
   "private": true,
-  "scripts": { "dev": "next dev --hostname 127.0.0.1", "build": "next build", "start": "next start --hostname 127.0.0.1", "typecheck": "tsc --noEmit", "setup:media": "node scripts/setup-ytdlp.mjs", "test": "node --test tests/*.test.mjs" },
+  "scripts": { "dev": "next dev --hostname 127.0.0.1", "build": "next build", "start": "next start --hostname 0.0.0.0", "typecheck": "tsc --noEmit", "setup:media": "node scripts/setup-ytdlp.mjs", "test": "node --test tests/*.test.mjs" },
   "dependencies": { "next": "latest", "react": "latest", "react-dom": "latest", "lucide-react": "latest" },
   "devDependencies": { "typescript": "latest", "@types/node": "latest", "@types/react": "latest", "@types/react-dom": "latest" }
 }
