@@ -33,14 +33,14 @@ export function MediaResult({media,mode}:{media:MediaInfo;mode:'video'|'audio'})
   const maxHeight = Math.max(0,...media.options.map(o => o.height ?? 0));
   const duration = media.duration ? `${Math.floor(media.duration/60)}:${String(Math.floor(media.duration%60)).padStart(2,'0')}` : 'Длительность неизвестна';
   return <div className="demo-panel" aria-label="Результат анализа">
-    <div className="demo-label">ДАННЫЕ ВИДЕО · {maxHeight ? `МАКСИМУМ ${maxHeight}p${media.options.some(o => o.height === maxHeight && o.fps === 60) ? ' · 60 FPS' : ''}` : 'АУДИО'}</div>
+    <div className="demo-label">Варианты {maxHeight ? `видео · до ${maxHeight}p` : 'аудио'}</div>
     <div className="media-info"><img className="result-thumbnail" src={media.thumbnail} alt="Обложка видео" referrerPolicy="no-referrer"/><div><span className="media-category">{media.channel}</span><h3>{media.title}</h3><p>{duration}{maxHeight > 0 ? ` · максимум ${maxHeight}p` : ''}</p></div></div>
     {!choice ? <p className="preview-note">Для этого ролика нет доступных вариантов {mode === 'video' ? 'видео со звуком' : 'аудио'}.</p> : <>
       <div className="options result-options"><label>Формат<div className="select-wrap"><select value={currentContainer} onChange={e => {setContainer(e.target.value);setQuality('');setVariant('');}}>{containers.map(c => <option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div></label><label>{mode === 'video' ? 'Качество и плавность' : 'Качество звука'}<div className="select-wrap"><select value={group.key} onChange={e => {setQuality(e.target.value);setVariant('');}}>{groups.map(g => <option key={g.key} value={g.key}>{g.label}{mode === 'audio' ? ` · ${g.options[0]?.codec}` : ''}</option>)}</select><ChevronDown size={16}/></div></label></div>
       {mode === 'video' && variants.length > 1 && <details className="codec-details"><summary><Settings2 size={14}/> Другие варианты кодека <ChevronDown size={14}/></summary><div className="codec-options">{variants.map(o => <label key={o.id}><input type="radio" name={`codec-${media.id}-${group.key}`} checked={choice.id === o.id} onChange={() => setVariant(o.id)}/><span>{codecName(o.codec)}{o.needsMerge ? ' · объединить звук' : ''}</span></label>)}</div></details>}
       <p className="result-details">Размер: {sizeLabel(choice)}{choice.needsMerge ? ' · видео и звук будут объединены' : ''}{choice.conversion ? ' · MP3 через конвертацию' : ''}</p>
-      {mode === 'video' && !media.options.some(o => o.fps === 60) && <p className="fps-hint">YouTube не предоставляет вариант 60 fps для этого видео. Показаны доступные частоты кадров.</p>}
-      <p className="preview-note">Варианты получены из источника. Скачивание файла подключим следующим этапом.</p>
+      {mode === 'video' && !media.options.some(o => o.fps === 60) && <p className="fps-hint">Для этого видео доступны только показанные значения fps.</p>}
+      <p className="preview-note">Скачивание файла пока не подключено.</p>
     </>}
   </div>;
 }
