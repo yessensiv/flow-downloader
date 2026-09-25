@@ -1,4 +1,11 @@
 /* Final interface layer: type hierarchy, interaction and reduced motion. */
+.status-topline { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.status-topline .status-heading { min-width: 0; line-height: 1.45; }
+.download-percent { flex-shrink: 0; color: #c1f578; font-size: clamp(26px, 4vw, 34px); font-weight: 700; letter-spacing: -1px; line-height: 1; font-variant-numeric: tabular-nums; }
+.download-percent small { margin-left: 3px; font-size: .55em; font-weight: 500; letter-spacing: 0; color: #b7c4ae; }
+.status-downloading progress { height: 8px; }
+.status-downloading progress::-webkit-progress-value { background: linear-gradient(90deg, #93d84c, #cffb94); }
+.status-downloading progress::-moz-progress-bar { background: linear-gradient(90deg, #93d84c, #cffb94); }
 .transfer-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 12px 0; padding: 16px; background: #10170e; border-radius: 12px; }
 .transfer-metrics dt { font-size: 14px; color: #b7c4ae; line-height: 1.5; }
 .transfer-metrics dd { margin: 6px 0 0; font-size: 22px; font-weight: 650; color: #eff8e9; font-variant-numeric: tabular-nums; }

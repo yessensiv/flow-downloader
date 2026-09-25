@@ -10,7 +10,7 @@ import { parseTransfer, freshTransfer, type TransferMetrics } from './download-m
 import { storageUsage, storageFits, jobReservation, storageLimit, GiB } from './storage-budget';
 
 const root = path.join(process.cwd(), '.downloads');
-const ttl = 60 * 60 * 1000;
+const ttl = 5 * 60 * 1000;
 const limit = 2 * 1024 ** 3;
 type Job = { startedAt: number; downloadingAt?: number; processingAt?: number; finishedAt?: number; transfer?: TransferMetrics; trackCount?: number; id: string; state: 'cancelled' | 'cancelling' | 'checking' | 'downloading' | 'merging' | 'converting' | 'ready' | 'error'; progress: number | null; title?: string; error?: string; file?: string; mime?: string; ext?: string; kind?: 'video' | 'audio'; size?: number; expires: number; readers: number; cancelRequested?: boolean; stop?: () => Promise<void>; done?: Promise<void> };
 const shared = globalThis as typeof globalThis & { flowDownloads?: Map<string, Job>; flowCleanup?: ReturnType<typeof setInterval>; flowAdmission?: Promise<void>; flowReservations?: Set<string> };
@@ -56,8 +56,9 @@ export async function createDownload(videoId: string, optionId: string) {
       throw new AnalysisError('BUSY', 'Уже готовим два файла. Попробуйте немного позже.', 429);
     const usage = await storageUsage(root).catch(() => { throw new AnalysisError('STORAGE_UNAVAILABLE', 'Не удалось проверить свободное место. Попробуйте позже.', 503); });
     const remaining = [...reservations].reduce((sum, id) => sum + Math.max(0, jobReservation - (usage.sizes.get(id) || 0)), 0);
-    if (!storageFits(usage.used, remaining, usage.free)) throw new AnalysisError('STORAGE_FULL', 'Недостаточно свободного места для нового файла. Попробуйте позже.', 503);
-    const job: Job = { startedAt: Date.now(), id: randomUUID(), state: 'checking', progress: null, expires: Date.now() + ttl, readers: 0 };
+    if (!storageFits(usage.used, remaining, usage.free)) throw new AnalysisError('STORAGE_FULL', 'Сервис занят. Попробуйте позже.', 503);
+    // Retention starts after processing ends, never while an active task is running.
+    const job: Job = { startedAt: Date.now(), id: randomUUID(), state: 'checking', progress: null, expires: Number.MAX_SAFE_INTEGER, readers: 0 };
     jobs.set(job.id, job);
     reservations.add(job.id);
     job.done = run(job, videoId, optionId);

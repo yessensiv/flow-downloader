@@ -35,11 +35,19 @@ export async function analyzeVideo(id: string, signal?: AbortSignal, onProcess?:
       output += chunk.toString();
     });
     child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8192); });
-    child.on('error', () => { failure = new AnalysisError('NOT_CONFIGURED', 'Обработчик видео ещё не установлен на сервере.', 503); });
+    child.on('error', error => {
+      console.error('[analyze] failed to start yt-dlp', { id, error: error.message });
+      failure = new AnalysisError('NOT_CONFIGURED', 'Обработчик видео ещё не установлен на сервере.', 503);
+    });
     child.on('close', code => {
       clearTimeout(timeout); signal?.removeEventListener('abort', abort);
       if (failure) return reject(failure);
-      if (code !== 0) return reject(classifyError(stderr));
+      if (code !== 0) {
+        // Keep the provider details in Render logs so deployment issues can be
+        // diagnosed without exposing yt-dlp output to the browser.
+        console.error('[analyze] yt-dlp failed', { id, code, stderr: stderr.slice(-4000) });
+        return reject(classifyError(stderr));
+      }
       try { resolve(JSON.parse(output)); } catch { reject(new AnalysisError('INVALID_RESPONSE', 'YouTube вернул некорректные данные. Попробуйте позже.')); }
     });
     onProcess?.(child);

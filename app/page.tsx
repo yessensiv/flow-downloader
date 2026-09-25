@@ -12,7 +12,7 @@ const faq = [
   ["Какое качество можно скачать?", "После анализа показываем доступные разрешения до 4K, включая Full HD и 1440p. Список зависит от исходного ролика и формата."],
   ["Можно скачать только музыку?", "Да. Выберите «Аудио»: M4A и WebM сохраняют исходную дорожку, MP3 создаётся с выбранным битрейтом от 128 до 320 кбит/с."],
   ["Поддерживаются видео с доступом по ссылке?", "Да, если ролик открывается по ссылке без входа в аккаунт. Приватные видео и ролики с требованием авторизации не поддерживаются."],
-  ["Скачивание уже работает?", "Да, видео можно подготовить и сохранить со звуком в выбранном качестве. Размер — до 2 ГБ, готовый файл доступен один час. Также доступны отдельное аудио и MP3."],
+  ["Скачивание уже работает?", "Да, видео можно подготовить и сохранить со звуком в выбранном качестве. Размер — до 2 ГБ, готовый файл доступен 5 минут. Также доступны отдельное аудио и MP3."],
 ];
 
 export default function Home() {
@@ -91,7 +91,7 @@ export default function Home() {
             {notice && <div className="notice" role="status"><CircleHelp size={18}/><span>{notice}</span></div>}
             {loading && <div className="analysis-loading" role="status"><LoaderCircle className="flow-spinner" size={26}/><div><strong>Находим ваше видео</strong><p>Проверяем доступное качество и звук. Обычно это несколько секунд.</p></div></div>}
             {media && <MediaResult key={`${media.id}:${mode}`} media={media} mode={mode}/>}
-            {!media && <DownloadAction restoreOnly/>}
+            {!media && <DownloadAction key={mode} mode={mode} restoreOnly/>}
             {demo && <div className="demo-panel">
               <div className="demo-label"><Sparkles size={13}/> Пример результата · для знакомства</div>
               <div className="media-info"><div className="thumbnail"><div className="sun"/><div className="mountain back"/><div className="mountain"/><Play size={22} fill="currentColor"/><span>04:32</span></div><div><span className="media-category">NATURE & SOUND</span><h3>Маленькое путешествие. Большие впечатления.</h3><p>Пример видео · 4 минуты · до 4K</p></div></div>
