@@ -22,7 +22,7 @@ export async function analyzeVideo(id: string, signal?: AbortSignal, onProcess?:
   analyzerState.flowAnalyzers = (analyzerState.flowAnalyzers || 0) + 1;
   const raw = await new Promise<RawInfo>((resolve, reject) => {
     if (signal?.aborted) { reject(new AnalysisError('TIMEOUT', 'Запрос отменён.', 499)); return; }
-    const child = spawn(binary, ['--ignore-config','--no-playlist','--skip-download','--dump-single-json','--no-progress','--no-warnings','--no-cache-dir','--no-js-runtimes','--js-runtimes',`node:${process.execPath}`,'--socket-timeout','15','--retries','1','--extractor-retries','1','--',`https://www.youtube.com/watch?v=${id}`], { windowsHide: true, detached: process.platform !== 'win32' });
+    const child = spawn(binary, ['--ignore-config','--no-playlist','--skip-download','--dump-single-json','--no-progress','--no-warnings','--no-cache-dir','--js-runtimes',`node:${process.execPath}`,'--extractor-args','youtube:player_client=android,web','--socket-timeout','15','--retries','1','--extractor-retries','1','--',`https://www.youtube.com/watch?v=${id}`], { windowsHide: true, detached: process.platform !== 'win32' });
     let output = ''; let stderr = ''; let bytes = 0; let failure: Error | undefined;
     const stop = () => { void stopProcessTree(child).catch(() => {}); };
     const abort = () => { failure = new AnalysisError('TIMEOUT', 'Запрос отменён.', 499); stop(); };
