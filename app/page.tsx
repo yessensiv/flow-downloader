@@ -9,9 +9,9 @@ import { parseYouTubeUrl } from "@/lib/youtube";
 const videoQualities = ["2160p · 4K", "1440p · 2K", "1080p · Full HD", "720p · HD", "480p", "360p"];
 const faq = [
   ["Какое качество можно скачать?", "После анализа показываем доступные разрешения до 4K, включая Full HD и 1440p. Список зависит от исходного ролика и формата."],
-  ["Можно скачать только музыку?", "Пока можно посмотреть доступные аудиоформаты. Скачивание музыки в M4A и MP3 появится следующим этапом."],
+  ["Можно скачать только музыку?", "Да. Выберите «Аудио»: M4A и WebM сохраняют исходную дорожку, MP3 создаётся с выбранным битрейтом от 128 до 320 кбит/с."],
   ["Поддерживаются видео с доступом по ссылке?", "Да, если ролик открывается по ссылке без входа в аккаунт. Приватные видео и ролики с требованием авторизации не поддерживаются."],
-  ["Скачивание уже работает?", "Да, видео можно подготовить и сохранить со звуком в выбранном качестве. Размер — до 2 ГБ, готовый файл доступен один час. Скачивание отдельного аудио добавим следующим этапом."],
+  ["Скачивание уже работает?", "Да, видео можно подготовить и сохранить со звуком в выбранном качестве. Размер — до 2 ГБ, готовый файл доступен один час. Также доступны отдельное аудио и MP3."],
 ];
 
 export default function Home() {
@@ -100,9 +100,9 @@ export default function Home() {
           <div className="format-strip"><span>В ТВОЁМ ФОРМАТЕ</span><b>MP4</b><b>WEBM</b><b>MP3</b><b>M4A</b><i/><b className="quality-badge">4K <small>ULTRA HD</small></b></div>
         </section>
 
-        <section className="features" aria-label="Возможности"><article><span className="feature-icon"><Video size={21}/></span><h3>Каждая деталь на месте</h3><p>1080p, 1440p или 4K — выбирай качество, доступное в исходном видео.</p></article><article><span className="feature-icon"><Headphones size={21}/></span><h3>Только то, что звучит</h3><p>Музыка и подкасты без видео. Скачивание отдельного аудио — скоро.</p></article><article><span className="feature-icon"><Zap size={21}/></span><h3>Простой путь к файлу</h3><p>Ссылка, формат, загрузка. Всё нужное в одном месте, на любом экране.</p></article></section>
+        <section className="features" aria-label="Возможности"><article><span className="feature-icon"><Video size={21}/></span><h3>Каждая деталь на месте</h3><p>1080p, 1440p или 4K — выбирай качество, доступное в исходном видео.</p></article><article><span className="feature-icon"><Headphones size={21}/></span><h3>Только то, что звучит</h3><p>Музыка и подкасты без видео. Сохраняй исходный звук или выбирай привычный MP3.</p></article><article><span className="feature-icon"><Zap size={21}/></span><h3>Простой путь к файлу</h3><p>Ссылка, формат, загрузка. Всё нужное в одном месте, на любом экране.</p></article></section>
 
-<section className="how-section" id="how"><div className="section-heading"><div><span className="section-kicker">НИЧЕГО ЛИШНЕГО</span><h2>Три шага. И оно твоё.</h2></div><span className="outline-icon"><ArrowDown size={22}/></span></div><div className="steps">{[["01", "Скопируй ссылку", "Открой видео или трек на YouTube и скопируй его адрес."], ["02", "Выбери своё", "Укажи формат и доступное качество видео или аудио."], ["03", "Сохрани момент", "Дождись обработки и сохрани готовый файл на устройство."]].map(([n,t,d]) => <article key={n}><span className="step-number">{n}</span><h3>{t}</h3><p>{d}</p></article>)}</div><p className="preview-note"><Disc3 size={15}/> Видео со звуком уже доступно. Отдельное аудио — следующий этап.</p></section>
+<section className="how-section" id="how"><div className="section-heading"><div><span className="section-kicker">НИЧЕГО ЛИШНЕГО</span><h2>Три шага. И оно твоё.</h2></div><span className="outline-icon"><ArrowDown size={22}/></span></div><div className="steps">{[["01", "Скопируй ссылку", "Открой видео или трек на YouTube и скопируй его адрес."], ["02", "Выбери своё", "Укажи формат и доступное качество видео или аудио."], ["03", "Сохрани момент", "Дождись обработки и сохрани готовый файл на устройство."]].map(([n,t,d]) => <article key={n}><span className="step-number">{n}</span><h3>{t}</h3><p>{d}</p></article>)}</div><p className="preview-note"><Disc3 size={15}/> Видео со звуком или только аудио — выбирай то, что нужно.</p></section>
 
         <section className="faq-section" id="faq"><div><span className="section-kicker">ЕСТЬ ВОПРОС?</span><h2>Всё по делу.</h2><p>Несколько деталей,<br/>прежде чем начать.</p></div><div className="faq-list">{faq.map(([q,a]) => <details key={q}><summary>{q}<ChevronDown size={17}/></summary><p>{a}</p></details>)}</div></section>
       </main>

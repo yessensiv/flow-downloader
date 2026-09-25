@@ -20,7 +20,9 @@ export function MediaResult({media,mode}:{media:MediaInfo;mode:'video'|'audio'})
   const [quality,setQuality] = useState('');
   const [variant,setVariant] = useState('');
   const options = media.options.filter(o => o.kind === mode);
+  if (mode === 'audio') options.sort((a, b) => Number(b.label.match(/(\d+) kbps/)?.[1] || 0) - Number(a.label.match(/(\d+) kbps/)?.[1] || 0));
   const containers = [...new Set(options.map(o => o.container))];
+  if (mode === 'audio') containers.sort((a, b) => ['M4A', 'MP3', 'WEBM'].indexOf(a) - ['M4A', 'MP3', 'WEBM'].indexOf(b));
   const currentContainer = containers.includes(container) ? container : containers[0];
   const containerOptions = options.filter(o => o.container === currentContainer);
   const groups = [...new Map(containerOptions.map(o => {
@@ -35,13 +37,14 @@ export function MediaResult({media,mode}:{media:MediaInfo;mode:'video'|'audio'})
   const duration = media.duration ? `${Math.floor(media.duration/60)}:${String(Math.floor(media.duration%60)).padStart(2,'0')}` : 'Длительность неизвестна';
   return <div className="demo-panel" aria-label="Результат анализа">
     <div className="demo-label"><span className="result-dot"/> {mode === 'video' ? 'Видео найдено' : 'Аудиоформаты найдены'}</div>
-    <div className="media-info"><img className="result-thumbnail" src={media.thumbnail} alt="Обложка видео" referrerPolicy="no-referrer"/><div><span className="media-category">{media.channel}</span><h3>{media.title}</h3><p>{duration}{maxHeight > 0 ? ` · максимум ${maxHeight}p` : ''}</p></div></div>
+    <div className="media-info"><img className="result-thumbnail" src={media.thumbnail} alt="Обложка видео" referrerPolicy="no-referrer"/><div><span className="media-category">{media.channel}</span><h3>{media.title}</h3><p>{duration}{mode === 'video' && maxHeight > 0 ? ` · максимум ${maxHeight}p` : ''}</p></div></div>
     {!choice ? <p className="preview-note">Для этого ролика нет доступных вариантов {mode === 'video' ? 'видео со звуком' : 'аудио'}.</p> : <>
-      <div className="options result-options"><label>Формат<div className="select-wrap"><select value={currentContainer} onChange={e => {setContainer(e.target.value);setQuality('');setVariant('');}}>{containers.map(c => <option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div></label><label>{mode === 'video' ? 'Качество видео' : 'Качество звука'}<div className="select-wrap"><select value={group.key} onChange={e => {setQuality(e.target.value);setVariant('');}}>{groups.map(g => <option key={g.key} value={g.key}>{g.label}{mode === 'audio' ? ` · ${g.options[0]?.codec}` : ''}</option>)}</select><ChevronDown size={16}/></div></label></div>
+      <div className="options result-options"><label>Формат<div className="select-wrap"><select value={currentContainer} onChange={e => {setContainer(e.target.value);setQuality('');setVariant('');}}>{containers.map(c => <option key={c}>{c}</option>)}</select><ChevronDown size={16}/></div></label><label>{mode === 'video' ? 'Качество видео' : 'Качество звука'}<div className="select-wrap"><select value={group.key} onChange={e => {setQuality(e.target.value);setVariant('');}}>{groups.map(g => <option key={g.key} value={g.key}>{mode === 'audio' ? g.label.replace(/^(mp4a[^·]*|opus)\s*·\s*/i, '').replace(' · конвертация', '') : g.label}</option>)}</select><ChevronDown size={16}/></div></label></div>
       {mode === 'video' && variants.length > 1 && <details className="codec-details"><summary><Settings2 size={14}/> Дополнительные настройки <ChevronDown size={14}/></summary><div className="codec-options"><p className="codec-explanation">Кодек — способ хранения видео. Мы уже выбрали подходящий вариант; менять его необязательно.</p>{variants.map(o => <label key={o.id}><input type="radio" name={`codec-${media.id}-${group.key}`} checked={choice.id === o.id} onChange={() => setVariant(o.id)}/><span>{codecName(o.codec)}</span></label>)}</div></details>}
       <p className="result-details">{choice.size ? `Размер файла: ${sizeLabel(choice)}` : 'Точный размер будет известен после подготовки.'}{mode === 'video' ? ' · Со звуком' : ''}</p>
       {mode === 'video' && <p className="fps-hint">Число fps — кадров в секунду: чем выше, тем плавнее движение. Показываем только качество исходного видео.</p>}
-      {mode === 'video' ? <DownloadAction videoId={media.id} optionId={choice.id} label={`${choice.container} · ${group.label}`}/> : <p className="preview-note">Скачивание аудио подключим следующим этапом.</p>}
+      {mode === 'audio' && <p className="fps-hint">{choice.conversion ? 'MP3 — для привычных плееров. Более высокий битрейт увеличивает размер, но не улучшает исходную запись.' : 'Исходная аудиодорожка без повторного сжатия. Только звук, без видео.'}</p>}
+      <DownloadAction mode={mode} videoId={media.id} optionId={choice.id} label={`${choice.container} · ${mode === 'audio' ? group.label.replace(/^(mp4a[^·]*|opus)\s*·\s*/i, '').replace(' · конвертация', '') : group.label}`}/>
     </>}
   </div>;
 }

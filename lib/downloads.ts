@@ -3,15 +3,16 @@ import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { analyzeVideo, AnalysisError, classifyError } from './analyzer';
+import { downloadFormat } from './download-format';
 
 const root = path.join(process.cwd(), '.downloads');
 const ttl = 60 * 60 * 1000;
 const limit = 2 * 1024 ** 3;
-type Job = { id: string; state: 'checking' | 'downloading' | 'merging' | 'ready' | 'error'; progress: number | null; title?: string; error?: string; file?: string; size?: number; expires: number; readers: number };
+type Job = { id: string; state: 'checking' | 'downloading' | 'merging' | 'converting' | 'ready' | 'error'; progress: number | null; title?: string; error?: string; file?: string; mime?: string; ext?: string; kind?: 'video' | 'audio'; size?: number; expires: number; readers: number };
 const shared = globalThis as typeof globalThis & { flowDownloads?: Map<string, Job>; flowCleanup?: ReturnType<typeof setInterval> };
 const jobs = shared.flowDownloads ??= new Map<string, Job>();
 export function getJob(id: string) { return jobs.get(id); }
-export function jobView(job: Job) { return { id: job.id, state: job.state, progress: job.progress, title: job.title, error: job.error, size: job.size, expires: job.expires }; }
+export function jobView(job: Job) { return { id: job.id, state: job.state, progress: job.progress, title: job.title, error: job.error, kind: job.kind, size: job.size, expires: job.expires }; }
 async function cleanup() {
   await mkdir(root, { recursive: true });
   for (const [id, job] of jobs) {
@@ -47,17 +48,20 @@ async function run(job: Job, videoId: string, optionId: string) {
   try {
     await cleanup();
     const media = await analyzeVideo(videoId);
-    const choice = media.options.find(o => o.id === optionId && o.kind === 'video');
-    if (!choice || !/^[\w-]+(?:\+[\w-]+)?$/.test(choice.id)) throw new Error('Этот вариант уже недоступен. Найдите видео заново.');
+    const choice = media.options.find(o => o.id === optionId);
+    if (!choice) throw new Error('Этот вариант уже недоступен. Найдите видео заново.');
+    const output = downloadFormat(choice);
+    job.kind = choice.kind; job.mime = output.mime; job.ext = output.ext;
     if (choice.size && choice.size > limit) throw new Error('Файл больше 2 ГБ. Выберите качество ниже.');
     const ffmpeg = process.env.FFMPEG_PATH || path.join(process.cwd(), '.tools', process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg');
-    if (choice.needsMerge) await new Promise<void>((resolve, reject) => execFile(ffmpeg, ['-version'], { windowsHide: true, timeout: 5000 }, error => error ? reject(new Error('На сервере не установлен FFmpeg для объединения звука.')) : resolve()));
-    job.title = `${media.title} · ${choice.label} · ${choice.container}`;
+    if (choice.needsMerge || choice.conversion) await new Promise<void>((resolve, reject) => execFile(ffmpeg, ['-version'], { windowsHide: true, timeout: 5000 }, error => error ? reject(new Error('На сервере не установлен FFmpeg для обработки звука.')) : resolve()));
+    const qualityLabel = choice.kind === 'audio' ? choice.label.replace(/^(mp4a[^·]*|opus)\s*·\s*/i, '').replace(' · конвертация', '') : choice.label;
+    job.title = `${media.title} · ${qualityLabel} · ${choice.container}`;
     await mkdir(dir, { recursive: true });
     job.state = 'downloading';
     const binary = process.env.YTDLP_PATH || path.join(process.cwd(), '.tools', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(binary, ['--ignore-config', '--no-playlist', '--no-cache-dir', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--no-simulate', '--newline', '--progress', '--progress-template', 'download:FLOW:%(progress._percent_str)s', '--progress-template', 'postprocess:FLOW_MERGE', '--socket-timeout', '20', '--retries', '2', '--fragment-retries', '2', '--max-filesize', String(limit), '--ffmpeg-location', ffmpeg, '--merge-output-format', choice.container.toLowerCase(), '-f', choice.id, '-o', path.join(dir, 'video.%(ext)s'), '--', `https://www.youtube.com/watch?v=${videoId}`], { windowsHide: true });
+      const child = spawn(binary, ['--ignore-config', '--no-playlist', '--no-cache-dir', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--no-simulate', '--newline', '--progress', '--progress-template', 'download:FLOW:%(progress._percent_str)s', '--progress-template', 'postprocess:FLOW_MERGE', '--socket-timeout', '20', '--retries', '2', '--fragment-retries', '2', '--max-filesize', String(limit), '--ffmpeg-location', ffmpeg, ...output.args, '-o', path.join(dir, 'media.%(ext)s'), '--', `https://www.youtube.com/watch?v=${videoId}`], { windowsHide: true });
       let failure: Error | undefined;
       let stderr = '';
       let pending = '';
@@ -71,16 +75,16 @@ async function run(job: Job, videoId: string, optionId: string) {
         pending += chunk.toString();
         const lines = pending.split(/\r?\n/); pending = lines.pop()!.slice(-4096);
         for (const line of lines) {
-          if (line.includes('FLOW_MERGE') || line.includes('[Merger]')) { job.state = 'merging'; job.progress = null; }
+          if (line.includes('FLOW_MERGE') || line.includes('[Merger]') || line.includes('[ExtractAudio]')) { job.state = choice.conversion ? 'converting' : 'merging'; job.progress = null; }
           const match = /FLOW:\s*([\d.]+)%/.exec(line);
-          if (match && job.state !== 'merging') job.progress = Math.min(100, Number(match[1]));
+          if (match && job.state === 'downloading') job.progress = Math.min(100, Number(match[1]));
         }
       });
       child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8192); });
       child.on('error', () => { failure = new Error('Не удалось запустить обработчик скачивания.'); });
       child.on('close', code => { clearTimeout(timeout); clearInterval(quota); if (failure) reject(failure); else if (code !== 0) reject(classifyError(stderr)); else resolve(); });
     });
-    const file = path.join(dir, `video.${choice.container.toLowerCase()}`);
+    const file = path.join(dir, `media.${output.ext}`);
     const info = await stat(file).catch(() => { throw new Error('Файл не создан. Возможно, превышен лимит размера или формат недоступен.'); });
     if (!info.size || info.size > limit) throw new Error('Не удалось подготовить файл в пределах 2 ГБ. Выберите качество ниже.');
     job.file = file; job.size = info.size; job.state = 'ready'; job.progress = 100;
