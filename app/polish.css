@@ -1,4 +1,14 @@
 /* Final interface layer: type hierarchy, interaction and reduced motion. */
+.transfer-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin: 12px 0; padding: 16px; background: #10170e; border-radius: 12px; }
+.transfer-metrics dt { font-size: 14px; color: #b7c4ae; line-height: 1.5; }
+.transfer-metrics dd { margin: 6px 0 0; font-size: 22px; font-weight: 650; color: #eff8e9; font-variant-numeric: tabular-nums; }
+.download-timings { margin-top: 16px; font-size: 14px; line-height: 1.7; color: #b7c4ae; }
+.download-timings summary { cursor: pointer; min-height: 44px; padding: 10px 0; }
+.download-caption, .download-status, .media-info h3, .media-category, .error { overflow-wrap: anywhere; }
+.download-card .error { font-size: 15px; line-height: 1.65; }
+.media-info > div, .download-action, .result-options > * { min-width: 0; }
+.download-start { white-space: normal; text-align: center; }
+@media (max-width: 560px) { .transfer-metrics { grid-template-columns: 1fr; } .transfer-metrics dd { font-size: 20px; } }
 .download-steps { display: grid; grid-template-columns: repeat(4, 1fr); list-style: none; margin: 24px 0 16px; padding: 0; gap: 8px; }
 .download-steps li { display: flex; flex-direction: column; align-items: center; gap: 8px; color: #9da994; font-size: 12px; }
 .download-steps li > span { display: grid; place-items: center; width: 30px; height: 30px; border: 1px solid #45513c; border-radius: 50%; }

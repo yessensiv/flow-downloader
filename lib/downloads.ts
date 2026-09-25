@@ -6,17 +6,23 @@ import { analyzeVideo, AnalysisError, classifyError } from './analyzer';
 import { downloadFormat } from './download-format';
 import { stopProcessTree } from './process-tree';
 import { trackProgress } from './download-progress';
+import { parseTransfer, freshTransfer, type TransferMetrics } from './download-metrics';
 import { storageUsage, storageFits, jobReservation, storageLimit, GiB } from './storage-budget';
 
 const root = path.join(process.cwd(), '.downloads');
 const ttl = 60 * 60 * 1000;
 const limit = 2 * 1024 ** 3;
-type Job = { id: string; state: 'cancelled' | 'cancelling' | 'checking' | 'downloading' | 'merging' | 'converting' | 'ready' | 'error'; progress: number | null; title?: string; error?: string; file?: string; mime?: string; ext?: string; kind?: 'video' | 'audio'; size?: number; expires: number; readers: number; cancelRequested?: boolean; stop?: () => Promise<void>; done?: Promise<void> };
+type Job = { startedAt: number; downloadingAt?: number; processingAt?: number; finishedAt?: number; transfer?: TransferMetrics; trackCount?: number; id: string; state: 'cancelled' | 'cancelling' | 'checking' | 'downloading' | 'merging' | 'converting' | 'ready' | 'error'; progress: number | null; title?: string; error?: string; file?: string; mime?: string; ext?: string; kind?: 'video' | 'audio'; size?: number; expires: number; readers: number; cancelRequested?: boolean; stop?: () => Promise<void>; done?: Promise<void> };
 const shared = globalThis as typeof globalThis & { flowDownloads?: Map<string, Job>; flowCleanup?: ReturnType<typeof setInterval>; flowAdmission?: Promise<void>; flowReservations?: Set<string> };
 const jobs = shared.flowDownloads ??= new Map<string, Job>();
 const reservations = shared.flowReservations ??= new Set<string>();
 export function getJob(id: string) { return jobs.get(id); }
-export function jobView(job: Job) { return { id: job.id, state: job.state, progress: job.progress, title: job.title, error: job.error, kind: job.kind, size: job.size, expires: job.expires }; }
+export function jobView(job: Job) {
+  const end = job.finishedAt || Date.now();
+  return { id: job.id, state: job.state, progress: job.progress, title: job.title, error: job.error, kind: job.kind, size: job.size, expires: job.expires,
+    transfer: freshTransfer(job.transfer, job.state === 'downloading'), trackCount: job.trackCount,
+    timings: { checking: Math.max(0, (job.downloadingAt || end) - job.startedAt), downloading: job.downloadingAt ? Math.max(0, (job.processingAt || end) - job.downloadingAt) : 0, processing: job.processingAt ? Math.max(0, end - job.processingAt) : 0 } };
+}
 async function cleanup() {
   await mkdir(root, { recursive: true });
   for (const [id, job] of jobs) {
@@ -51,7 +57,7 @@ export async function createDownload(videoId: string, optionId: string) {
     const usage = await storageUsage(root).catch(() => { throw new AnalysisError('STORAGE_UNAVAILABLE', 'Не удалось проверить свободное место. Попробуйте позже.', 503); });
     const remaining = [...reservations].reduce((sum, id) => sum + Math.max(0, jobReservation - (usage.sizes.get(id) || 0)), 0);
     if (!storageFits(usage.used, remaining, usage.free)) throw new AnalysisError('STORAGE_FULL', 'Недостаточно свободного места для нового файла. Попробуйте позже.', 503);
-    const job: Job = { id: randomUUID(), state: 'checking', progress: null, expires: Date.now() + ttl, readers: 0 };
+    const job: Job = { startedAt: Date.now(), id: randomUUID(), state: 'checking', progress: null, expires: Date.now() + ttl, readers: 0 };
     jobs.set(job.id, job);
     reservations.add(job.id);
     job.done = run(job, videoId, optionId);
@@ -77,10 +83,10 @@ async function run(job: Job, videoId: string, optionId: string) {
     job.title = `${media.title} · ${qualityLabel} · ${choice.container}`;
     await mkdir(dir, { recursive: true });
     if (job.cancelRequested) throw new Error('Отменено');
-    job.state = 'downloading';
+    job.state = 'downloading'; job.downloadingAt = Date.now(); job.trackCount = choice.needsMerge ? 2 : 1;
     const binary = process.env.YTDLP_PATH || path.join(process.cwd(), '.tools', process.platform === 'win32' ? 'yt-dlp.exe' : 'yt-dlp');
     await new Promise<void>((resolve, reject) => {
-      const child = spawn(binary, ['--ignore-config', '--no-playlist', '--no-cache-dir', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--no-simulate', '--newline', '--progress', '--progress-template', 'download:FLOW:%(info.format_id)s:%(progress._percent_str)s', '--progress-template', 'postprocess:FLOW_MERGE', '--socket-timeout', '20', '--retries', '2', '--fragment-retries', '2', '--max-filesize', String(limit), '--ffmpeg-location', ffmpeg, ...output.args, '-o', path.join(dir, 'media.%(ext)s'), '--', `https://www.youtube.com/watch?v=${videoId}`], { windowsHide: true, detached: process.platform !== 'win32' });
+      const child = spawn(binary, ['--ignore-config', '--no-playlist', '--no-cache-dir', '--no-js-runtimes', '--js-runtimes', `node:${process.execPath}`, '--no-simulate', '--newline', '--progress', '--progress-template', 'download:FLOW:%(info.format_id)s:%(progress._percent_str)s:%(progress.speed)s:%(progress.eta)s', '--progress-template', 'postprocess:FLOW_MERGE', '--socket-timeout', '20', '--retries', '2', '--fragment-retries', '2', '--max-filesize', String(limit), '--ffmpeg-location', ffmpeg, ...output.args, '-o', path.join(dir, 'media.%(ext)s'), '--', `https://www.youtube.com/watch?v=${videoId}`], { windowsHide: true, detached: process.platform !== 'win32' });
       job.stop = () => stopProcessTree(child);
       let failure: Error | undefined;
       let stderr = '';
@@ -104,9 +110,12 @@ async function run(job: Job, videoId: string, optionId: string) {
         pending += chunk.toString();
         const lines = pending.split(/\r?\n/); pending = lines.pop()!.slice(-4096);
         for (const line of lines) {
-          if (line.includes('FLOW_MERGE') || line.includes('[Merger]') || line.includes('[ExtractAudio]')) { job.state = choice.conversion ? 'converting' : 'merging'; job.progress = null; }
-          const match = /FLOW:([^:]+):\s*([\d.]+)%/.exec(line);
-          if (match && job.state === 'downloading') job.progress = trackProgress(parts, match[1], Number(match[2]), choice.needsMerge ? 2 : 1);
+          if (line.includes('FLOW_MERGE') || line.includes('[Merger]') || line.includes('[ExtractAudio]')) { job.processingAt ??= Date.now(); job.state = choice.conversion ? 'converting' : 'merging'; job.progress = null; }
+          const metrics = parseTransfer(line);
+          if (metrics && job.state === 'downloading') {
+            job.progress = trackProgress(parts, metrics.id, metrics.percent, job.trackCount || 1);
+            job.transfer = { ...metrics, track: Math.max(1, [...parts.keys()].indexOf(metrics.id) + 1) };
+          }
         }
       });
       child.stderr.on('data', chunk => { stderr = (stderr + chunk.toString()).slice(-8192); });
@@ -124,7 +133,7 @@ async function run(job: Job, videoId: string, optionId: string) {
     job.state = job.cancelRequested ? 'cancelled' : 'error'; job.progress = null;
     job.error = job.cancelRequested ? undefined : error instanceof Error ? error.message : 'Не удалось подготовить файл.';
     await rm(dir, { recursive: true, force: true }).catch(() => {});
-  } finally { reservations.delete(job.id); job.stop = undefined; job.expires = Date.now() + ttl; }
+  } finally { job.finishedAt = Date.now(); reservations.delete(job.id); job.stop = undefined; job.expires = Date.now() + ttl; }
 }
 export async function cancelDownload(id: string) {
   const job = jobs.get(id);
