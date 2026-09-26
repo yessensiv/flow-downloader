@@ -26,6 +26,7 @@ class MainActivity : Activity() {
     private lateinit var engine: MediaEngine
     private lateinit var root: LinearLayout
     private lateinit var input: EditText
+    private lateinit var clearLink: TextView
     private lateinit var status: TextView
     private lateinit var cancelDownload: Button
     private lateinit var title: TextView
@@ -111,10 +112,25 @@ class MainActivity : Activity() {
         input = EditText(this).apply {
             textSize = 16f; setSingleLine(); setTextColor(Color.WHITE); setHintTextColor(Color.rgb(144, 159, 144))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
-            background = surface(); setPadding(dp(16), dp(14), dp(16), dp(14))
+            background = surface(); setPadding(dp(16), dp(14), dp(54), dp(14))
             minimumHeight = dp(58)
+            setSelectAllOnFocus(true)
         }
-        root.addView(input)
+        clearLink = TextView(this).apply {
+            text = "×"; textSize = 28f; gravity = android.view.Gravity.CENTER
+            setTextColor(Color.rgb(175, 190, 174)); isFocusable = false
+            contentDescription = text("Очистить ссылку", "Clear link")
+            background = android.graphics.drawable.RippleDrawable(
+                ColorStateList.valueOf(Color.argb(50, 194, 255, 112)), null,
+                GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(16).toFloat() })
+            visibility = View.GONE
+            setOnClickListener { input.text.clear(); input.requestFocus() }
+        }
+        val linkField = FrameLayout(this).apply {
+            addView(input, FrameLayout.LayoutParams(-1, -1))
+            addView(clearLink, FrameLayout.LayoutParams(dp(48), dp(48), android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL))
+        }
+        root.addView(linkField, LinearLayout.LayoutParams(-1, dp(62)))
         analyze = button("") {
             val url = input.text.toString()
             job(text("Ищем варианты…", "Finding options…")) {
@@ -208,6 +224,7 @@ class MainActivity : Activity() {
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                clearLink.visibility = if (s.isNullOrEmpty()) View.GONE else View.VISIBLE
                 if (!followingDownload) DownloadService.forgetCompleted()
                 media = null; title.text = ""; lastError = ""
                 ready?.parentFile?.deleteRecursively(); ready = null
