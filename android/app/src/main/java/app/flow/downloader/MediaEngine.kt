@@ -10,8 +10,6 @@ import java.io.File
 
 data class Choice(val selector: String, val label: String, val audio: Boolean, val mp3: Boolean = false, val extractAudio: Boolean = false)
 data class Media(val url: String, val title: String, val choices: List<Choice>, val thumbnail: String = "")
-data class PlaylistEntry(val url: String, val title: String, val channel: String, val duration: String, val thumbnail: String)
-data class Playlist(val title: String, val channel: String, val entries: List<PlaylistEntry>)
 
 class MediaEngine(private val context: Context) {
     private val preferences = context.getSharedPreferences("engine", Context.MODE_PRIVATE)
@@ -46,54 +44,17 @@ class MediaEngine(private val context: Context) {
         require(id != null && Regex("[A-Za-z0-9_-]{11}").matches(id)) { "URL" }
         return "https://www.youtube.com/watch?v=$id"
     }
-    fun playlistUrl(value: String): String? {
-        val uri = runCatching { Uri.parse(value.trim()) }.getOrNull() ?: return null
-        if (uri.scheme !in listOf("http", "https")) return null
-        val host = uri.host?.lowercase() ?: return null
-        if (host !in setOf("youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be")) return null
-        val id = uri.getQueryParameter("list") ?: return null
-        if (!Regex("[A-Za-z0-9_-]{1,128}").matches(id)) return null
-        return "https://www.youtube.com/playlist?list=$id"
-    }
-    private fun request(url: String, playlist: Boolean = false) = YoutubeDLRequest(url).apply {
+    private fun request(url: String) = YoutubeDLRequest(url).apply {
         addOption("--ignore-config")
-        if (!playlist) addOption("--no-playlist")
+        addOption("--no-playlist")
         addOption("--socket-timeout", "20")
         addOption("--retries", "1")
     }
-    fun analyzePlaylist(value: String, processId: String = "flow-playlist-analyze"): Playlist {
-        val url = playlistUrl(value) ?: error("URL")
-        ensureCurrent()
-        val req = request(url, playlist = true).apply {
-            addOption("--flat-playlist")
-            addOption("--playlist-end", "50")
-            addOption("--dump-single-json")
-            addOption("--skip-download")
-        }
-        val json = JSONObject(YoutubeDL.getInstance().execute(req, processId, null).out)
-        val entriesJson = json.optJSONArray("entries") ?: error("EMPTY_PLAYLIST")
-        val entries = (0 until entriesJson.length()).mapNotNull { index ->
-            val item = entriesJson.optJSONObject(index) ?: return@mapNotNull null
-            val id = item.optString("id").takeIf { Regex("[A-Za-z0-9_-]{11}").matches(it) }
-                ?: runCatching { Uri.parse(item.optString("url")).getQueryParameter("v") }.getOrNull()
-                    ?.takeIf { Regex("[A-Za-z0-9_-]{11}").matches(it) }
-                ?: return@mapNotNull null
-            val thumb = item.optString("thumbnail").takeIf { it.startsWith("https://") }
-                ?: "https://i.ytimg.com/vi/$id/hqdefault.jpg"
-            val seconds = item.optLong("duration", -1)
-            val duration = if (seconds < 0) "" else "%d:%02d".format(seconds / 60, seconds % 60)
-            PlaylistEntry("https://www.youtube.com/watch?v=$id", item.optString("title").ifBlank { "YouTube" },
-                item.optString("channel").ifBlank { item.optString("uploader") }, duration, thumb)
-        }.distinctBy { it.url }
-        require(entries.isNotEmpty()) { "EMPTY_PLAYLIST" }
-        return Playlist(json.optString("title").ifBlank { "YouTube playlist" },
-            json.optString("channel").ifBlank { json.optString("uploader") }, entries)
-    }
-    fun analyze(value: String, processId: String = "flow-analyze"): Media {
+    fun analyze(value: String): Media {
         val url = canonicalUrl(value)
         ensureCurrent()
         val req = request(url).apply { addOption("--dump-single-json"); addOption("--skip-download") }
-        val json = JSONObject(YoutubeDL.getInstance().execute(req, processId, null).out)
+        val json = JSONObject(YoutubeDL.getInstance().execute(req, "flow-analyze", null).out)
         require(!json.optBoolean("is_live") && json.optString("live_status") != "is_upcoming") { "LIVE" }
         val formats = json.getJSONArray("formats")
         val rows = (0 until formats.length()).map { formats.getJSONObject(it) }

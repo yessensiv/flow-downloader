@@ -134,28 +134,10 @@ class MainActivity : Activity() {
         analyze = button("") {
             val url = input.text.toString()
             job(text("Ищем варианты…", "Finding options…")) {
-                val playlistUrl = engine.playlistUrl(url)
-                if (playlistUrl != null) {
-                    val playlist = engine.analyzePlaylist(playlistUrl)
-                    val payload = org.json.JSONArray().apply {
-                        playlist.entries.forEach { entry -> put(org.json.JSONObject().apply {
-                            put("url", entry.url); put("title", entry.title); put("channel", entry.channel)
-                            put("duration", entry.duration); put("thumbnail", entry.thumbnail)
-                        }) }
-                    }
-                    runOnUiThread {
-                        startActivity(Intent(this, PlaylistActivity::class.java).apply {
-                            putExtra("title", playlist.title); putExtra("channel", playlist.channel)
-                            putExtra("entries", payload.toString()); putExtra("audio", audio)
-                            putExtra("english", english)
-                        })
-                    }
-                } else {
-                    val found = engine.analyze(url)
-                    runOnUiThread {
-                        ready?.parentFile?.deleteRecursively(); ready = null
-                        media = found; title.text = found.title; refreshChoices(); loadThumbnail(found)
-                    }
+                val found = engine.analyze(url)
+                runOnUiThread {
+                    ready?.parentFile?.deleteRecursively(); ready = null
+                    media = found; title.text = found.title; refreshChoices(); loadThumbnail(found)
                 }
             }
         }
@@ -219,7 +201,7 @@ class MainActivity : Activity() {
         save = button("") {
             if (saved || busy) return@button
             val file = ready ?: return@button
-            val mime = MediaStoreSaver.mimeFor(file, audio)
+            val mime = when (file.extension) { "mp3" -> "audio/mpeg"; "m4a" -> "audio/mp4"; "mkv" -> "video/x-matroska"; "mp4" -> "video/mp4"; "webm" -> if (audio) "audio/webm" else "video/webm"; else -> "application/octet-stream" }
             exportTitle = media?.title ?: "Flow"
             exportMime = mime
             exportThumbnail = media?.thumbnail.orEmpty()
@@ -455,11 +437,30 @@ class MainActivity : Activity() {
         if (busy) return
         busy = true; saved = false; lastError = ""; refresh()
         status.text = text("Сохраняем в папку устройства…", "Saving to your device folders…")
+        val safeTitle = rawTitle.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").trim().take(100).ifBlank { "Flow" }
+        val extension = file.extension.lowercase()
+        val collection = if (mime.startsWith("audio/")) android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            else android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val relativePath = if (mime.startsWith("audio/")) "Music/Flow" else "Movies/Flow"
         worker.execute {
+            var uri: android.net.Uri? = null
             try {
-                MediaStoreSaver.save(applicationContext, file, rawTitle, mime, exportThumbnail)
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "$safeTitle.$extension")
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                uri = contentResolver.insert(collection, values) ?: error("Could not create media entry")
+                contentResolver.openOutputStream(uri!!, "w")?.use { output -> file.inputStream().use { it.copyTo(output) } }
+                    ?: error("Could not open media destination")
+                check(contentResolver.update(uri!!, android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                }, null, null) == 1) { "Could not finish media file" }
+                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), safeTitle, mime, file.length(), System.currentTimeMillis(), exportThumbnail))
                 runOnUiThread { if (!isDestroyed) saved = true }
             } catch (e: Exception) {
+                uri?.let { runCatching { contentResolver.delete(it, null, null) } }
                 runOnUiThread { if (!isDestroyed) lastError = e.message ?: "Save failed" }
             } finally {
                 runOnUiThread { if (!isDestroyed) { busy = false; refresh() } }
