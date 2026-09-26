@@ -1,35 +1,72 @@
-# Flow
+<div align="center">
+  <img src="docs/flow-icon.svg" width="128" height="128" alt="Flow icon">
+  <h1>Flow</h1>
+  <p><strong>Your videos. Your music. To go.</strong></p>
+  <p>A YouTube video and audio downloader for Android.</p>
+  <p><strong>English</strong> &nbsp;|&nbsp; <a href="README.ru.md">Русский</a></p>
+  <p>Android 8.0+ · Kotlin · English & Russian · No server required</p>
+  <p><a href="#get-started">Get started</a> · <a href="#features">Features</a> · <a href="#build-the-android-app">Build</a> · <a href="#local-web-version">Web version</a></p>
+</div>
 
-Приложение для подготовки видео и аудио с YouTube. Проект содержит две версии: самостоятельное Android-приложение и локальное веб-приложение с серверной обработкой.
+---
 
-> Android — основной вариант для телефона. Веб-версия — локальный прототип; публичный хостинг для неё пока не настроен.
+Flow prepares video and audio directly on your phone and keeps your saved files in one place. Paste a YouTube link, choose the available quality or audio format, and save the result.
 
-## Версии
+**Android is the main app.** This repository also includes an experimental local web version that runs on a computer.
 
-| | Android | Веб |
-| --- | --- | --- |
-| Где работает | На Android 8.0+ | В браузере; обработка идёт на запущенном сервере |
-| Нужен ли сервер | Нет | Да, Node.js-процесс на компьютере или сервере |
-| Сохранение | В `Movies/Flow` и `Music/Flow` на телефоне | Готовый файл передаётся из временного хранилища сервера |
-| Срок хранения | Пока пользователь не удалит файл | Готовый файл хранится 5 минут |
-| Состояние | Активная разработка; текущая версия 0.19.0 | Экспериментальный локальный прототип |
+## Features
 
-## Возможности Android
+| | What you can do |
+| --- | --- |
+| Video | Choose available quality and frame rate, up to 2160p when offered by the source. |
+| Audio | Save an available source audio format or convert to MP3 at 192 kbps. |
+| Progress | See percentage, speed and estimated time remaining when available; cancel from the app or notification. |
+| Background downloads | Continue preparing a file while using another app, with a foreground service notification. |
+| My downloads | Browse separate video and music tabs with thumbnails and title search. |
+| Multiple selection | Hold a file to select it, then tap more files to share or delete them together. |
+| Phone storage | Save to system folders, open files in another app, or share them. |
+| Languages | Switch the app interface between English and Russian. |
 
-- Поиск доступных вариантов видео и аудио по ссылке YouTube.
-- Доступные у источника качество и частота кадров; искусственно не повышаются.
-- Отдельные вкладки «Видео» и «Музыка», MP3 и исходные аудиоформаты, когда они доступны.
-- Прогресс, скорость и примерное оставшееся время, если загрузчик получил эти данные; отмена загрузки из приложения или уведомления.
-- Сохранение видео в `Movies/Flow`, аудио в `Music/Flow`; история с поиском, компактными строками с обложками, множественным выбором, пакетной отправкой и удалением.
-- Интерфейс на русском и английском. Можно передать ссылку в Flow через системное меню «Поделиться».
+## Get started
 
-Видеопотоки без звука объединяются со звуковой дорожкой в MKV. Некоторые плееры могут не поддерживать каждый кодек: контейнер MP4 или MKV сам по себе не гарантирует совместимость со всеми устройствами.
+The current project version is **0.19.0**. The instructions below produce a **debug APK** for installation on your phone.
 
-## Быстрый старт: Android
+1. Build the APK using [Android Studio or the Windows scripts](#build-the-android-app).
+2. Copy the APK to your phone and open it. Allow installation from that source if Android asks, or install through USB as described below.
+3. Open Flow and paste a link, or use **YouTube → Share → Flow**.
+4. Choose **Video** or **Audio**, tap **Show options**, then choose a quality or format.
+5. Prepare the file and save it. Find it again in **My downloads**.
 
-### Собрать APK
+**Selecting several files:** hold any saved item, then tap the others. Use the group actions to share or delete. Cancel selection or remove the last checkmark to return to normal browsing. Deleting a file from the device requires confirmation.
 
-Нужны JDK 17 и Android SDK Platform 35. Откройте каталог `android/` в Android Studio либо подготовьте инструменты в Windows:
+### Where are my files?
+
+| Device | Save location |
+| --- | --- |
+| Android 10 and newer | Videos: `Movies/Flow` · Music: `Music/Flow` |
+| Android 8–9 | Choose a location with the system file picker. |
+
+Saved files stay on your phone until you delete them. The Android app does not need the local web server.
+
+## Build the Android app
+
+Requirements: **JDK 17**, **Android SDK Platform 35**, and **Build Tools 35.0.0**. Supported device architectures: ARM64, ARMv7 and x86_64.
+
+### Android Studio
+
+1. Clone this repository and open the `android/` folder in Android Studio.
+2. Install SDK Platform 35 and Build Tools 35.0.0 through SDK Manager.
+3. Sync the project and build the debug APK.
+
+Output, relative to the repository root:
+
+```text
+android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Windows terminal
+
+Run these commands from the repository root. The setup script downloads and verifies the tools into the ignored `.tools/android` directory.
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-android.ps1
@@ -39,83 +76,79 @@ $sdk = (Resolve-Path .tools\android\sdk).Path
 .\scripts\build-android.ps1
 ```
 
-Скрипт подготовки загружает JDK и Gradle в игнорируемый каталог `.tools/android` и проверяет архивы по SHA-256. Android SDK лицензии нужно принять один раз. APK появится здесь:
+For macOS/Linux, configure JDK 17 and the Android SDK, then run `./gradlew assembleDebug` from `android/`.
 
-```text
-android/app/build/outputs/apk/debug/app-debug.apk
-```
+### Install over USB
 
-### Установить на подключённый телефон (Windows)
-
-Включите «Для разработчиков» и «Отладку по USB», подключите телефон, подтвердите доверие компьютеру и выполните:
+Enable USB debugging on your phone, connect it and accept the computer's authorization prompt. On Windows, from the repository root:
 
 ```powershell
 $env:ANDROID_USER_HOME = "$PWD\.tools\android\user-home"
 & .\.tools\android\sdk\platform-tools\adb.exe install -r .\android\app\build\outputs\apk\debug\app-debug.apk
 ```
 
-Это debug-сборка для разработки, не подписанный релиз Google Play. Поддерживаются Android 8.0+ и ABI ARM64, ARMv7 и x86_64.
+Use the same command to update an installed build signed with the same key. These instructions create a development build, not a Google Play release.
 
-### Использовать
+## Good to know
 
-1. Вставьте ссылку или выберите YouTube → «Поделиться» → Flow.
-2. Выберите режим «Видео» или «Аудио», затем нажмите «Показать варианты».
-3. Выберите доступное качество/формат и начните подготовку.
-4. Сохраните готовый файл. На Android 10+ он попадёт в `Movies/Flow` или `Music/Flow` и появится в «Моих загрузках».
+- **Quality depends on the source.** Flow does not upscale video. Converting to MP3 at 192 kbps does not improve the original audio quality.
+- **Video and sound may use MKV.** Separate video and audio streams are merged into MKV; playback support depends on the player and codecs.
+- **One file is processed at a time.** Downloads depend on YouTube availability and your connection. Private videos, live streams and content requiring sign-in may not work.
+- **Background work has limits.** Android battery restrictions or force-stopping Flow can interrupt a download. An active task does not resume after a reboot or force stop.
+- **YouTube changes can affect downloads.** Try the app's engine update action when extraction fails. Updates cannot guarantee that every link will work.
+- **No YouTube credentials are required.** Flow does not use YouTube cookies or account passwords.
 
-Загрузка может продолжаться в фоне с уведомлением, пока Android не остановил приложение. Для отображения уведомлений на Android 13+ необходимо разрешить уведомления. Android, энергосбережение производителя и сеть могут ограничивать длительные фоновые задачи. После принудительной остановки приложения или перезагрузки активная задача не восстанавливается.
+## Local web version
 
-## Быстрый старт: локальная веб-версия
+The web app is an experimental local prototype. It uses a Node.js server with yt-dlp and FFmpeg to prepare files.
 
-Нужны Node.js 24+, npm и доступ в интернет. В корне проекта:
+Requirements: **Node.js 24+**, npm, FFmpeg and internet access.
 
 ```sh
 npm ci
 npm run setup:media
-npm run dev
 ```
 
-Откройте [http://127.0.0.1:3000](http://127.0.0.1:3000). В Windows FFmpeg можно установить в локальный `.tools`:
+On Windows, install the local FFmpeg tools:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\setup-ffmpeg.ps1
 ```
 
-В macOS/Linux установите FFmpeg средствами своей системы. Если исполняемые файлы находятся не в стандартном месте, скопируйте `.env.example` в `.env.local` и задайте абсолютные пути `YTDLP_PATH` и/или `FFMPEG_PATH`.
+On macOS/Linux, install FFmpeg with your system's package manager. Then start the app:
 
-Веб-приложение использует Node.js API, yt-dlp и FFmpeg на сервере. Готовые файлы временно хранятся на сервере до 5 минут; задачи и квоты находятся в памяти одного процесса и теряются при его перезапуске. Поэтому эта версия не предназначена для serverless-хостинга или нескольких экземпляров без отдельной очереди, общего хранилища и постоянного хранилища состояния. Не публикуйте локальный сервер в интернете без отдельной проверки безопасности и эксплуатационной конфигурации.
-
-## Команды разработки
-
-| Команда | Назначение |
-| --- | --- |
-| `npm run dev` | Локальный веб-сервер для разработки |
-| `npm run build` | Production-сборка веб-приложения |
-| `npm run start` | Запуск собранной веб-версии |
-| `npm run typecheck` | Проверка типов TypeScript |
-| `npm test` | Тесты веб-версии |
-| `./scripts/build-android.ps1` | Debug-сборка Android на Windows после установки SDK |
-
-## Структура проекта
-
-```text
-app/                 Веб-интерфейс и API
-lib/                 Серверная логика веб-версии: анализ, задачи, форматы
-tests/               Тесты веб-версии
-scripts/             Установка зависимостей и локальные проверки
-android/             Нативное приложение Android на Kotlin
+```sh
+npm run dev
 ```
 
-Подробности Android-сборки и ручных проверок: [android/README.md](android/README.md).
+Open [localhost:3000](http://127.0.0.1:3000). For custom executable locations, copy `.env.example` to `.env.local` and set `YTDLP_PATH` and/or `FFMPEG_PATH`.
 
-## Ограничения и использование
+Unlike Android, the web version keeps prepared files on its server for **5 minutes**. Jobs and quotas live in a single process and are lost on restart. Public hosting is not configured; serverless or multi-instance deployment needs additional storage and job management.
 
-- Успех зависит от доступности конкретного ролика и форматов у YouTube. Приватные ролики, прямые трансляции и контент, требующий входа в аккаунт, могут быть недоступны.
-- Скорость и ETA зависят от сети и источника; приложение показывает их только когда загрузчик предоставляет значения.
-- Приложение не использует cookies или учётные данные YouTube. Не передавайте приложению пароль или файлы cookies.
-- Пользователь отвечает за наличие прав на сохраняемый контент и соблюдение правил применимых сервисов и законодательства.
-- Flow — независимый проект и не связан с YouTube или Google.
+## Development
 
-## Благодарности
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the local web development server. |
+| `npm run build` | Build the web app. |
+| `npm run start` | Start the built web app. |
+| `npm run typecheck` | Check TypeScript types. |
+| `npm test` | Run web tests. |
+| `.\scripts\build-android.ps1` | Build the Android debug APK on Windows. |
 
-Android-версия использует [youtubedl-android](https://github.com/yausername/youtubedl-android), включая yt-dlp и FFmpeg. Веб-версия использует системные исполняемые файлы yt-dlp и FFmpeg. У компонентов могут быть собственные лицензии и условия распространения; проверьте их перед созданием или публикацией релизной сборки.
+```text
+android/   Native Kotlin app
+app/       Web interface and API
+lib/       Web server logic, formats and download jobs
+tests/     Web tests
+scripts/   Tool setup and local checks
+docs/      README assets
+```
+
+Found a bug? [Open an issue](https://github.com/yessensiv/flow-downloader/issues) with your app version, Android version, steps to reproduce, and the error text or a screenshot.
+
+## Credits
+
+Built with [youtubedl-android](https://github.com/yausername/youtubedl-android), [yt-dlp](https://github.com/yt-dlp/yt-dlp) and [FFmpeg](https://ffmpeg.org/). The web app uses [Next.js](https://nextjs.org/). Dependencies have their own licenses and distribution terms.
+
+Save content you have permission to download. Flow is an independent project and is not affiliated with YouTube or Google.
