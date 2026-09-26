@@ -27,6 +27,10 @@ class DownloadsActivity : Activity() {
     private lateinit var list: LinearLayout
     private lateinit var results: LinearLayout
     private lateinit var tabs: LinearLayout
+    private lateinit var selectionBar: LinearLayout
+    private lateinit var selectionCount: TextView
+    private lateinit var selectAll: CheckBox
+    private lateinit var selectionButton: Button
     private lateinit var search: EditText
     private lateinit var history: DownloadHistory
     private var english = false
@@ -34,6 +38,9 @@ class DownloadsActivity : Activity() {
     private var query = ""
     private var deleting = false
     private var pendingDeletion: SavedDownload? = null
+    private var pendingBulkDeletion: List<SavedDownload> = emptyList()
+    private var selecting = false
+    private val selectedUris = linkedSetOf<String>()
     private val worker = Executors.newSingleThreadExecutor()
     private val imageWorker = Executors.newSingleThreadExecutor()
     private fun text(ru: String, en: String) = if (english) en else ru
@@ -53,7 +60,11 @@ class DownloadsActivity : Activity() {
         english = intent.getBooleanExtra("english", false)
         history = DownloadHistory(this)
         music = savedInstanceState?.getBoolean("music") ?: false
+        selecting = savedInstanceState?.getBoolean("selecting") ?: false
+        selectedUris.addAll(savedInstanceState?.getStringArrayList("selectedUris").orEmpty())
         pendingDeletion = savedInstanceState?.getString("pendingDeletion")?.let { uri -> history.list().find { it.uri == uri } }
+        pendingBulkDeletion = savedInstanceState?.getStringArrayList("pendingBulkDeletion")
+            ?.let { uris -> history.list().filter { it.uri in uris } }.orEmpty()
         val scroll = ScrollView(this).apply { setBackgroundColor(Color.rgb(15, 20, 16)); isFillViewport = true }
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(24)) }
         scroll.addView(list); setContentView(scroll)
@@ -107,7 +118,11 @@ class DownloadsActivity : Activity() {
         setOnClickListener { click() }
     }
     private fun buildHeader() {
-        list.addView(action(text("‹  Назад", "‹  Back")) { finish() }, LinearLayout.LayoutParams(dp(110), dp(48)))
+        val navigation = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
+        navigation.addView(action(text("‹  Назад", "‹  Back")) { finish() }, LinearLayout.LayoutParams(dp(110), dp(48)))
+        selectionButton = action(text("Выбрать", "Select")) { toggleSelectionMode() }.apply { gravity = android.view.Gravity.CENTER }
+        navigation.addView(selectionButton, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(8) })
+        list.addView(navigation, LinearLayout.LayoutParams(-1, dp(48)))
         list.addView(label(text("Мои загрузки", "My downloads"), 28))
         list.addView(label(text("Видео и музыка — каждый файл на своём месте.",
             "Your saved videos and music, neatly separated."), 15, true))
@@ -121,6 +136,30 @@ class DownloadsActivity : Activity() {
         list.addView(search, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(4) })
         tabs = LinearLayout(this)
         list.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
+        selectionBar = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(10))
+            background = GradientDrawable().apply { setColor(Color.rgb(23, 31, 24)); cornerRadius = dp(16).toFloat() }
+            visibility = View.GONE
+        }
+        val summary = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        selectAll = CheckBox(this).apply {
+            textSize = 13f; setTextColor(Color.WHITE); buttonTintList = ColorStateList.valueOf(lime)
+            setOnCheckedChangeListener { _, checked ->
+                val visible = visibleItems().map { it.uri }.toSet()
+                if (checked) selectedUris.addAll(visible) else selectedUris.removeAll(visible)
+                renderItems()
+            }
+        }
+        summary.addView(selectAll, LinearLayout.LayoutParams(0, dp(42), 1f))
+        selectionCount = TextView(this).apply { textSize = 13f; setTextColor(Color.rgb(175, 190, 174)); gravity = android.view.Gravity.CENTER_VERTICAL }
+        summary.addView(selectionCount)
+        selectionBar.addView(summary)
+        val bulkActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        bulkActions.addView(action("") { shareSelected() }.apply { tag = "bulk-share" }, LinearLayout.LayoutParams(0, dp(44), 1f))
+        bulkActions.addView(action("") { confirmDeleteSelected() }.apply { tag = "bulk-delete" },
+            LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(8) })
+        selectionBar.addView(bulkActions)
+        list.addView(selectionBar, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         list.addView(results)
     }
@@ -130,7 +169,10 @@ class DownloadsActivity : Activity() {
         listOf(false, true).forEach { audio ->
             val count = all.count { it.isAudio == audio }
             val name = if (audio) text("Музыка", "Music") else text("Видео", "Video")
-            tabs.addView(action("$name · $count") { music = audio; render() }.apply {
+            tabs.addView(action("$name · $count") {
+                if (music != audio) selectedUris.clear()
+                music = audio; render()
+            }.apply {
                 if (music == audio) {
                     setTextColor(Color.rgb(15, 20, 16))
                     background = GradientDrawable().apply { setColor(lime); cornerRadius = dp(12).toFloat() }
@@ -153,7 +195,14 @@ class DownloadsActivity : Activity() {
                 val shape = GradientDrawable().apply { setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(15).toFloat() }
                 background = RippleDrawable(ColorStateList.valueOf(Color.argb(36, 194, 255, 112)), shape, null)
                 isClickable = true; isFocusable = true
-                setOnClickListener { access(item, false) }
+                setOnClickListener { if (selecting) toggleSelected(item) else access(item, false) }
+            }
+            if (selecting) {
+                row.addView(CheckBox(this).apply {
+                    buttonTintList = ColorStateList.valueOf(lime)
+                    isChecked = item.uri in selectedUris
+                    isClickable = false; isFocusable = false
+                }, LinearLayout.LayoutParams(dp(30), dp(42)).apply { rightMargin = dp(4) })
             }
             val thumbnail = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
@@ -178,7 +227,7 @@ class DownloadsActivity : Activity() {
                 setPadding(0, 0, 0, 0)
             })
             row.addView(details, LinearLayout.LayoutParams(0, dp(60), 1f))
-            row.addView(cardAction("⋮", text("Действия с файлом", "File actions")) {
+            if (!selecting) row.addView(cardAction("⋮", text("Действия с файлом", "File actions")) {
                 AlertDialog.Builder(this).setTitle(item.title)
                     .setItems(arrayOf(
                         text("Открыть", "Open"),
@@ -197,8 +246,144 @@ class DownloadsActivity : Activity() {
                 LinearLayout.LayoutParams(dp(44), dp(48)))
             results.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
         }
+        updateSelectionUi(items)
         animateRows()
     }
+    private fun visibleItems(): List<SavedDownload> = history.list()
+        .filter { it.isAudio == music && it.title.contains(query.trim(), ignoreCase = true) }
+    private fun selectedItems(): List<SavedDownload> = history.list()
+        .filter { it.isAudio == music && it.uri in selectedUris }
+
+    private fun toggleSelectionMode() {
+        if (deleting) return
+        selecting = !selecting
+        if (!selecting) selectedUris.clear()
+        renderItems()
+    }
+
+    private fun toggleSelected(item: SavedDownload) {
+        if (item.uri in selectedUris) selectedUris.remove(item.uri) else selectedUris.add(item.uri)
+        renderItems()
+    }
+
+    private fun updateSelectionUi(visible: List<SavedDownload>) {
+        selectionButton.text = if (selecting) text("Отмена", "Cancel") else text("Выбрать", "Select")
+        selectionButton.isEnabled = !deleting
+        selectionBar.visibility = if (selecting) View.VISIBLE else View.GONE
+        if (!selecting) return
+        selectAll.setOnCheckedChangeListener(null)
+        val visibleUris = visible.map { it.uri }
+        selectAll.text = text("Выбрать все (${visible.size})", "Select all (${visible.size})")
+        selectAll.isChecked = visibleUris.isNotEmpty() && visibleUris.all { it in selectedUris }
+        selectAll.isEnabled = visible.isNotEmpty() && !deleting
+        selectAll.setOnCheckedChangeListener { _, checked ->
+            if (checked) selectedUris.addAll(visibleUris) else selectedUris.removeAll(visibleUris.toSet())
+            renderItems()
+        }
+        val count = selectedItems().size
+        selectionCount.text = text("Выбрано: $count", "Selected: $count")
+        val share = selectionBar.findViewWithTag<Button>("bulk-share")
+        val delete = selectionBar.findViewWithTag<Button>("bulk-delete")
+        share.text = text("↗  Поделиться", "↗  Share")
+        delete.text = text("⌫  Удалить", "⌫  Delete")
+        listOf(share, delete).forEach { button ->
+            button.isEnabled = count > 0 && !deleting
+            button.alpha = if (button.isEnabled) 1f else .45f
+        }
+    }
+
+    private fun shareSelected() {
+        if (deleting) return
+        val items = selectedItems()
+        if (items.isEmpty()) return
+        worker.execute {
+            val available = items.all { item -> runCatching {
+                contentResolver.openAssetFileDescriptor(Uri.parse(item.uri), "r")?.use { true } ?: false
+            }.getOrDefault(false) }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                if (!available) {
+                    unavailable()
+                    return@runOnUiThread
+                }
+                try {
+                    val uris = ArrayList(items.map { Uri.parse(it.uri) })
+                    val title = if (uris.size == 1) items.first().title else text("${uris.size} файла Flow", "${uris.size} Flow files")
+                    val send = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                        type = if (music) "audio/*" else "video/*"
+                        putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        clipData = ClipData.newRawUri(title, uris.first()).apply {
+                            uris.drop(1).forEach { addItem(ClipData.Item(it)) }
+                        }
+                    }
+                    startActivity(Intent.createChooser(send, text("Поделиться файлами", "Share files")))
+                } catch (_: Exception) {
+                    Toast.makeText(this, text("Не удалось открыть меню отправки.", "Could not open the share menu."), Toast.LENGTH_LONG).show()
+                }
+            }
+        }
+    }
+
+    private fun confirmDeleteSelected() {
+        if (deleting) return
+        val items = selectedItems()
+        if (items.isEmpty()) return
+        AlertDialog.Builder(this).setTitle(text("Удалить ${items.size} файлов?", "Delete ${items.size} files?"))
+            .setMessage(text("Файлы будут удалены с устройства и из истории Flow. Это действие нельзя отменить.",
+                "The files will be deleted from your device and Flow history. This cannot be undone."))
+            .setNegativeButton(text("Отмена", "Cancel"), null)
+            .setPositiveButton(text("Удалить", "Delete")) { _, _ -> deleteSelected(items) }.show()
+    }
+
+    private fun deleteSelected(items: List<SavedDownload>) {
+        if (deleting) return
+        if (android.os.Build.VERSION.SDK_INT >= 30 && items.all { Uri.parse(it.uri).authority == android.provider.MediaStore.AUTHORITY }) {
+            pendingBulkDeletion = items
+            try {
+                startIntentSenderForResult(
+                    android.provider.MediaStore.createDeleteRequest(contentResolver, items.map { Uri.parse(it.uri) }).intentSender,
+                    32, null, 0, 0, 0
+                )
+            } catch (_: Exception) {
+                pendingBulkDeletion = emptyList()
+                AlertDialog.Builder(this).setMessage(text("Android не смог открыть подтверждение удаления. Файлы не изменены.",
+                    "Android could not show delete confirmation. No files were changed."))
+                    .setPositiveButton("OK", null).show()
+            }
+            return
+        }
+        deleting = true
+        render()
+        worker.execute {
+            val deleted = mutableListOf<SavedDownload>()
+            items.forEach { item ->
+                val result = runCatching {
+                    val uri = Uri.parse(item.uri)
+                    val removed = if (android.provider.DocumentsContract.isDocumentUri(this, uri))
+                        android.provider.DocumentsContract.deleteDocument(contentResolver, uri)
+                    else contentResolver.delete(uri, null, null) > 0
+                    if (removed) history.remove(item.uri)
+                    removed
+                }.getOrDefault(false)
+                if (result) deleted += item
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                deleting = false
+                deleted.forEach { selectedUris.remove(it.uri) }
+                if (deleted.isEmpty()) selecting = false
+                render()
+                if (deleted.size == items.size) Toast.makeText(this,
+                    text("Удалено файлов: ${deleted.size}.", "Deleted ${deleted.size} files."), Toast.LENGTH_LONG).show()
+                else AlertDialog.Builder(this).setMessage(text(
+                    "Удалено ${deleted.size} из ${items.size}. Для остальных отмените выбор и подтвердите удаление по одному через меню ⋮.",
+                    "Deleted ${deleted.size} of ${items.size}. Cancel selection, then confirm deletion individually from each ⋮ menu."))
+                    .setPositiveButton("OK", null).show()
+            }
+        }
+    }
+
     private fun loadThumbnail(rawUrl: String, target: ImageView) {
         imageWorker.execute {
             val bitmap = runCatching {
@@ -306,6 +491,30 @@ class DownloadsActivity : Activity() {
     @Deprecated("Uses system document picker")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 32) {
+            val items = pendingBulkDeletion
+            pendingBulkDeletion = emptyList()
+            if (resultCode == RESULT_OK && items.isNotEmpty()) {
+                worker.execute {
+                    val removed = mutableListOf<SavedDownload>()
+                    items.forEach { item ->
+                        if (runCatching { history.remove(item.uri) }.isSuccess) removed += item
+                    }
+                    runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
+                        removed.forEach { selectedUris.remove(it.uri) }
+                        render()
+                        if (removed.size == items.size) Toast.makeText(this,
+                            text("Файлов удалено: ${removed.size}.", "Deleted ${removed.size} files."), Toast.LENGTH_LONG).show()
+                        else AlertDialog.Builder(this).setMessage(text(
+                            "Android удалил файлы, но не все записи истории удалось обновить.",
+                            "Android deleted the files, but some history entries could not be updated."))
+                            .setPositiveButton("OK", null).show()
+                    }
+                }
+            } else renderItems()
+            return
+        }
         if (requestCode == 31) {
             val item = pendingDeletion ?: return
             pendingDeletion = null
@@ -341,6 +550,8 @@ class DownloadsActivity : Activity() {
     }
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean("music", music); outState.putString("pendingDeletion", pendingDeletion?.uri)
+        outState.putBoolean("selecting", selecting); outState.putStringArrayList("selectedUris", ArrayList(selectedUris))
+        outState.putStringArrayList("pendingBulkDeletion", ArrayList(pendingBulkDeletion.map { it.uri }))
         super.onSaveInstanceState(outState)
     }
     private fun access(item: SavedDownload, share: Boolean) {
