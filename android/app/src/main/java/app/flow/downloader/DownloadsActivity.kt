@@ -150,7 +150,10 @@ class DownloadsActivity : Activity() {
             setOnCheckedChangeListener { _, checked ->
                 val visible = visibleItems().map { it.uri }.toSet()
                 if (checked) selectedUris.addAll(visible) else selectedUris.removeAll(visible)
-                updateSelectionUi(visibleItems())
+                if (selectedUris.isEmpty()) {
+                    selecting = false
+                    renderItems()
+                } else updateSelectionUi(visibleItems())
             }
         }
         summary.addView(selectAll, LinearLayout.LayoutParams(0, dp(42), 1f))
@@ -325,8 +328,10 @@ class DownloadsActivity : Activity() {
 
     private fun toggleSelected(item: SavedDownload) {
         if (item.uri in selectedUris) selectedUris.remove(item.uri) else selectedUris.add(item.uri)
-        if (selectedUris.isEmpty()) selecting = false
-        updateSelectionUi(visibleItems())
+        if (selectedUris.isEmpty()) {
+            selecting = false
+            renderItems()
+        } else updateSelectionUi(visibleItems())
     }
 
     private fun updateSelectionUi(visible: List<SavedDownload>) {
@@ -346,7 +351,10 @@ class DownloadsActivity : Activity() {
         selectAll.isEnabled = visible.isNotEmpty() && !deleting
         selectAll.setOnCheckedChangeListener { _, checked ->
             if (checked) selectedUris.addAll(visibleUris) else selectedUris.removeAll(visibleUris.toSet())
-            updateSelectionUi(visibleItems())
+            if (selectedUris.isEmpty()) {
+                selecting = false
+                renderItems()
+            } else updateSelectionUi(visibleItems())
         }
         (0 until results.childCount).forEach { index ->
             val row = results.getChildAt(index) as? LinearLayout ?: return@forEach
