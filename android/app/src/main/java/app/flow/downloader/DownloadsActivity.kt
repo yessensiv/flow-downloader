@@ -8,6 +8,7 @@ import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.BitmapFactory
+import android.graphics.Bitmap
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -21,6 +22,7 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.text.DateFormat
 import java.util.Date
+import android.util.LruCache
 import java.util.concurrent.Executors
 
 class DownloadsActivity : Activity() {
@@ -43,6 +45,9 @@ class DownloadsActivity : Activity() {
     private val selectedUris = linkedSetOf<String>()
     private val worker = Executors.newSingleThreadExecutor()
     private val imageWorker = Executors.newSingleThreadExecutor()
+    private val thumbnailCache = object : LruCache<String, Bitmap>(8 * 1024 * 1024) {
+        override fun sizeOf(key: String, value: Bitmap) = value.byteCount
+    }
     private fun text(ru: String, en: String) = if (english) en else ru
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private val lime = Color.rgb(194, 255, 112)
@@ -147,7 +152,7 @@ class DownloadsActivity : Activity() {
             setOnCheckedChangeListener { _, checked ->
                 val visible = visibleItems().map { it.uri }.toSet()
                 if (checked) selectedUris.addAll(visible) else selectedUris.removeAll(visible)
-                renderItems()
+                updateSelectionUi(visibleItems())
             }
         }
         summary.addView(selectAll, LinearLayout.LayoutParams(0, dp(42), 1f))
@@ -192,8 +197,8 @@ class DownloadsActivity : Activity() {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
                 setPadding(dp(10), dp(9), dp(4), dp(9))
-                val shape = GradientDrawable().apply { setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(15).toFloat() }
-                background = RippleDrawable(ColorStateList.valueOf(Color.argb(36, 194, 255, 112)), shape, null)
+                tag = item.uri
+                background = rowBackground(item.uri in selectedUris)
                 isClickable = true; isFocusable = true
                 setOnClickListener { if (selecting) toggleSelected(item) else access(item, false) }
             }
@@ -201,6 +206,7 @@ class DownloadsActivity : Activity() {
                 row.addView(CheckBox(this).apply {
                     buttonTintList = ColorStateList.valueOf(lime)
                     isChecked = item.uri in selectedUris
+                    tag = "selection-checkbox"
                     isClickable = false; isFocusable = false
                 }, LinearLayout.LayoutParams(dp(30), dp(42)).apply { rightMargin = dp(4) })
             }
@@ -210,7 +216,10 @@ class DownloadsActivity : Activity() {
                 clipToOutline = true
                 contentDescription = item.title
             }
-            if (item.thumbnail.isNotBlank()) loadThumbnail(item.thumbnail, thumbnail)
+            if (item.thumbnail.isNotBlank()) {
+                val cached = thumbnailCache.get(item.thumbnail)
+                if (cached != null) thumbnail.setImageBitmap(cached) else loadThumbnail(item.thumbnail, thumbnail)
+            }
             else thumbnail.setImageResource(if (item.isAudio) android.R.drawable.ic_media_play else android.R.drawable.ic_menu_slideshow)
             row.addView(thumbnail, LinearLayout.LayoutParams(dp(104), dp(60)).apply { rightMargin = dp(11) })
 
@@ -251,6 +260,15 @@ class DownloadsActivity : Activity() {
     }
     private fun visibleItems(): List<SavedDownload> = history.list()
         .filter { it.isAudio == music && it.title.contains(query.trim(), ignoreCase = true) }
+
+    private fun rowBackground(selected: Boolean): RippleDrawable {
+        val shape = GradientDrawable().apply {
+            setColor(if (selected) Color.rgb(35, 48, 34) else Color.rgb(28, 36, 29))
+            cornerRadius = dp(15).toFloat()
+            setStroke(dp(1), if (selected) Color.rgb(105, 151, 65) else Color.rgb(28, 36, 29))
+        }
+        return RippleDrawable(ColorStateList.valueOf(Color.argb(36, 194, 255, 112)), shape, null)
+    }
     private fun selectedItems(): List<SavedDownload> = history.list()
         .filter { it.isAudio == music && it.uri in selectedUris }
 
@@ -263,7 +281,7 @@ class DownloadsActivity : Activity() {
 
     private fun toggleSelected(item: SavedDownload) {
         if (item.uri in selectedUris) selectedUris.remove(item.uri) else selectedUris.add(item.uri)
-        renderItems()
+        updateSelectionUi(visibleItems())
     }
 
     private fun updateSelectionUi(visible: List<SavedDownload>) {
@@ -278,7 +296,14 @@ class DownloadsActivity : Activity() {
         selectAll.isEnabled = visible.isNotEmpty() && !deleting
         selectAll.setOnCheckedChangeListener { _, checked ->
             if (checked) selectedUris.addAll(visibleUris) else selectedUris.removeAll(visibleUris.toSet())
-            renderItems()
+            updateSelectionUi(visibleItems())
+        }
+        (0 until results.childCount).forEach { index ->
+            val row = results.getChildAt(index) as? LinearLayout ?: return@forEach
+            val uri = row.tag as? String ?: return@forEach
+            val selected = uri in selectedUris
+            row.background = rowBackground(selected)
+            row.findViewWithTag<CheckBox>("selection-checkbox")?.isChecked = selected
         }
         val count = selectedItems().size
         selectionCount.text = text("Выбрано: $count", "Selected: $count")
@@ -409,7 +434,10 @@ class DownloadsActivity : Activity() {
                     BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })
                 } finally { connection.disconnect() }
             }.getOrNull()
-            if (bitmap != null) runOnUiThread { if (!isDestroyed && target.parent != null) target.setImageBitmap(bitmap) }
+            if (bitmap != null) {
+                thumbnailCache.put(rawUrl, bitmap)
+                runOnUiThread { if (!isDestroyed && target.parent != null) target.setImageBitmap(bitmap) }
+            }
         }
     }
     private fun removeEntry(item: SavedDownload) {
