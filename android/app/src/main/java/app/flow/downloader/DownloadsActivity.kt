@@ -5,10 +5,12 @@ import android.app.AlertDialog
 import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
+import android.graphics.drawable.RippleDrawable
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
@@ -89,6 +91,21 @@ class DownloadsActivity : Activity() {
         }
         setOnClickListener { click() }
     }
+    private fun cardAction(value: String, description: String = value, click: () -> Unit) = TextView(this).apply {
+        text = value; textSize = 14f; gravity = android.view.Gravity.CENTER
+        setTextColor(lime); minHeight = dp(48); isClickable = true; isFocusable = true
+        contentDescription = description
+        val mask = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(12).toFloat() }
+        background = RippleDrawable(ColorStateList.valueOf(Color.argb(42, 194, 255, 112)), null, mask)
+        setOnTouchListener { view, event ->
+            if (ValueAnimator.areAnimatorsEnabled()) when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> view.animate().scaleX(.97f).scaleY(.97f).setDuration(75L).start()
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> view.animate().scaleX(1f).scaleY(1f).setDuration(120L).start()
+            }
+            false
+        }
+        setOnClickListener { click() }
+    }
     private fun buildHeader() {
         list.addView(action(text("‹  Назад", "‹  Back")) { finish() }, LinearLayout.LayoutParams(dp(110), dp(48)))
         list.addView(label(text("Мои загрузки", "My downloads"), 28))
@@ -152,14 +169,14 @@ class DownloadsActivity : Activity() {
             card.addView(label(item.title, 20))
             card.addView(label("${android.text.format.Formatter.formatShortFileSize(this, item.bytes)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.savedAt))}", 13, true))
             val actions = LinearLayout(this)
-            actions.addView(action(text("Открыть", "Open")) { access(item, false) }, LinearLayout.LayoutParams(0, dp(48), 1f))
-            actions.addView(action(text("Поделиться", "Share")) { access(item, true) }, LinearLayout.LayoutParams(0, dp(48), 1f))
-            actions.addView(action("⋮") {
+            actions.addView(cardAction(text("↗  Открыть", "↗  Open")) { access(item, false) }, LinearLayout.LayoutParams(0, dp(48), 1f))
+            actions.addView(cardAction(text("↗  Поделиться", "↗  Share")) { access(item, true) }, LinearLayout.LayoutParams(0, dp(48), 1f))
+            actions.addView(cardAction("⋮", text("Действия с файлом", "File actions")) {
                 AlertDialog.Builder(this).setTitle(item.title)
                     .setItems(arrayOf(text("Удалить файл с устройства…", "Delete file from device…"), text("Убрать только запись (файл останется)", "Remove history only (keep file)"))) { _, which ->
                         if (which == 0) confirmDelete(item) else removeEntry(item)
                     }.show()
-            }.apply { contentDescription = text("Действия с файлом", "File actions"); isEnabled = !deleting }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            }.apply { isEnabled = !deleting; alpha = if (deleting) .45f else 1f }, LinearLayout.LayoutParams(dp(48), dp(48)))
             card.addView(actions)
             results.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
         }

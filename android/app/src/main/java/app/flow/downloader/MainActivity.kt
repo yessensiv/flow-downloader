@@ -182,6 +182,7 @@ class MainActivity : Activity() {
         }
         style(cancelDownload, false)
         save = button("") {
+            if (saved || busy) return@button
             val file = ready ?: return@button
             val mime = when (file.extension) { "mp3" -> "audio/mpeg"; "m4a" -> "audio/mp4"; "mkv" -> "video/x-matroska"; "mp4" -> "video/mp4"; "webm" -> if (audio) "audio/webm" else "video/webm"; else -> "application/octet-stream" }
             exportTitle = media?.title ?: "Flow"
@@ -270,7 +271,7 @@ class MainActivity : Activity() {
         input.hint = text("Вставьте ссылку YouTube", "Paste a YouTube link")
         analyze.text = text("Показать варианты", "Show options")
         download.text = text("↓  Подготовить файл", "↓  Prepare download")
-        save.text = text("Сохранить в папку Flow", "Save to Flow folder")
+        save.text = if (saved) text("✓  Уже сохранено", "✓  Already saved") else text("Сохранить в папку Flow", "Save to Flow folder")
         update.text = text("↻  Обновить движок", "↻  Update engine")
         historyButton.text = text("Мои загрузки", "My downloads")
         style(historyButton, false)
@@ -278,6 +279,7 @@ class MainActivity : Activity() {
         spinner.isEnabled = !busy
         download.isEnabled = !busy && choices.isNotEmpty()
         save.visibility = if (ready != null && !busy) View.VISIBLE else View.GONE
+        save.isEnabled = !busy && !saved
         title.visibility = if (media != null) View.VISIBLE else View.GONE
         val wasCardVisible = resultCard.visibility == View.VISIBLE
         resultCard.visibility = title.visibility

@@ -9,8 +9,8 @@ android {
         applicationId = "app.flow.downloader"
         minSdk = 26
         targetSdk = 35
-        versionCode = 9
-        versionName = "0.9.0"
+        versionCode = 10
+        versionName = "0.10.0"
         testInstrumentationRunner = "app.flow.downloader.HistoryInstrumentation"
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
     }
