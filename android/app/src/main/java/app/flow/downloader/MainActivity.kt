@@ -33,6 +33,8 @@ class MainActivity : Activity() {
     private lateinit var spinner: Spinner
     private lateinit var bitrateSpinner: Spinner
     private lateinit var bitrateLabel: TextView
+    private lateinit var bitrateHint: TextView
+    private var exportLanguage: Boolean? = null
     private lateinit var containerSpinner: Spinner
     private lateinit var containerLabel: TextView
     private lateinit var embedCover: Switch
@@ -170,6 +172,9 @@ class MainActivity : Activity() {
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("MKV", "MP4"))
         }
         bitrateLabel = label("", 14)
+        bitrateHint = label("", 12).apply {
+            setTextColor(Color.rgb(153, 170, 150)); setPadding(dp(2), 0, dp(2), dp(6))
+        }
         bitrateSpinner = Spinner(this).apply {
             background = surface(); minimumHeight = dp(54)
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, bitrates.map { "$it kbps" })
@@ -182,6 +187,25 @@ class MainActivity : Activity() {
         embedCover = Switch(this).apply {
             setTextColor(Color.WHITE); isChecked = exportPrefs.getBoolean("cover", true)
             setOnCheckedChangeListener { _, checked -> exportPrefs.edit().putBoolean("cover", checked).apply() }
+        }
+        listOf(containerLabel, bitrateLabel).forEach {
+            it.setTextColor(Color.rgb(175, 190, 174)); it.setPadding(0, dp(4), 0, dp(4))
+        }
+        listOf(spinner, containerSpinner, bitrateSpinner).forEach {
+            it.background = surface(Color.rgb(18, 25, 19)); it.minimumHeight = dp(52)
+            it.setPadding(dp(2), 0, dp(2), 0)
+        }
+        listOf(embedMetadata, embedCover).forEach {
+            it.textSize = 15f; it.minimumHeight = dp(64)
+            it.setPadding(dp(12), dp(10), dp(12), dp(10))
+            it.background = surface(Color.rgb(22, 30, 23))
+            it.switchPadding = dp(12)
+            it.thumbTintList = ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Color.rgb(78, 91, 77), lime, Color.rgb(151, 166, 147)))
+            it.trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Color.rgb(80, 107, 49), Color.rgb(55, 66, 55)))
+        }
+        bitrateSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { refreshExportOptions() }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
         spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { refreshExportOptions() }
@@ -217,8 +241,8 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             background = surface(); setPadding(dp(20), dp(20), dp(20), dp(12))
         }
-        listOf(resultLabel, thumbnail, title, qualityLabel, spinner, containerLabel, containerSpinner, bitrateLabel, bitrateSpinner, embedMetadata, embedCover, download).forEach {
-            root.removeView(it); resultCard.addView(it, LinearLayout.LayoutParams(-1, if (it == download || it == spinner) dp(54) else -2).apply { bottomMargin = dp(10) })
+        listOf(resultLabel, thumbnail, title, qualityLabel, spinner, containerLabel, containerSpinner, bitrateLabel, bitrateSpinner, bitrateHint, embedMetadata, embedCover, download).forEach {
+            root.removeView(it); resultCard.addView(it, LinearLayout.LayoutParams(-1, if (it == download || it is Spinner) dp(54) else -2).apply { bottomMargin = dp(if (it == qualityLabel || it == bitrateLabel || it == containerLabel) 4 else 10) })
         }
         root.addView(resultCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22); bottomMargin = dp(14) })
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
@@ -363,22 +387,56 @@ class MainActivity : Activity() {
     }
     private fun refreshExportOptions() {
         if (!::embedCover.isInitialized) return
+        if (exportLanguage != english) {
+            exportLanguage = english
+            val selectedBitrate = bitrateSpinner.selectedItemPosition.coerceAtLeast(0)
+            val selectedContainer = containerSpinner.selectedItemPosition.coerceAtLeast(0)
+            bitrateSpinner.adapter = exportAdapter(bitrates.map { rate -> "$rate " + text("кбит/с", "kbps") + if (rate == 192) text(" · Рекомендуем", " · Recommended") else "" })
+            bitrateSpinner.setSelection(selectedBitrate)
+            containerSpinner.adapter = exportAdapter(listOf("MKV", "MP4"))
+            containerSpinner.setSelection(selectedContainer)
+        }
         val choice = choices.getOrNull(spinner.selectedItemPosition)
         containerLabel.text = text("Формат видео", "Video format")
         containerLabel.visibility = if (audio) View.GONE else View.VISIBLE
         containerSpinner.visibility = containerLabel.visibility
         containerSpinner.isEnabled = !busy
         val lossy = choice?.audio == true && choice.format in listOf("mp3", "m4a", "opus")
-        bitrateLabel.text = text("Битрейт (выше не значит лучше исходника)", "Bitrate (cannot improve the source)")
+        bitrateLabel.text = text("Качество звука", "Audio quality")
         bitrateLabel.visibility = if (lossy) View.VISIBLE else View.GONE
         bitrateSpinner.visibility = bitrateLabel.visibility
+        bitrateHint.visibility = if (audio) View.VISIBLE else View.GONE
+        val rate = bitrates.getOrElse(bitrateSpinner.selectedItemPosition) { 192 }
+        bitrateHint.text = when {
+            !lossy && choice?.format in listOf("flac", "wav") -> text("Без дополнительного сжатия · большой файл", "No additional lossy compression · larger file")
+            !lossy -> text("Исходное качество · без выбора битрейта", "Source quality · no bitrate selection")
+            rate < 192 -> text("Меньше размер файла · сильнее сжатие", "Smaller file · more compression")
+            rate == 192 -> text("Баланс размера и качества для повседневного прослушивания", "Balanced size and quality for everyday listening")
+            else -> text("Больше размер файла. Качество ограничено оригиналом.", "Larger file. Quality is limited by the source.")
+        }
         bitrateSpinner.isEnabled = !busy
         val supportsCover = choice != null && (!choice.audio || choice.format in listOf("mp3", "m4a", "opus", "flac") || (choice.format.isEmpty() && (choice.extractAudio || choice.label.substringBefore(" ·") in listOf("M4A", "MP3", "OPUS"))))
-        embedCover.text = if (supportsCover) text("Встроить обложку", "Embed cover art") else text("Обложка недоступна в этом формате", "Cover art unavailable for this format")
+        embedCover.text = optionCaption(text("Обложка", "Cover art"), if (supportsCover) text("Картинка внутри файла для плеера", "Artwork saved inside the file") else text("Этот формат не поддерживает обложку", "This format does not support cover art"))
         embedCover.isEnabled = !busy && supportsCover
         embedCover.alpha = if (supportsCover) 1f else .45f
-        embedMetadata.text = text("Встроить метаданные", "Embed metadata")
+        embedMetadata.text = optionCaption(text("Название и исполнитель", "Title and artist"), text("Сведения о треке, если доступны", "Track details, when available"))
         embedMetadata.isEnabled = !busy
+    }
+
+    private fun optionCaption(title: String, subtitle: String): CharSequence = android.text.SpannableString("$title\n$subtitle").apply {
+        setSpan(android.text.style.RelativeSizeSpan(.8f), title.length + 1, length, 0)
+        setSpan(android.text.style.ForegroundColorSpan(Color.rgb(153, 170, 150)), title.length + 1, length, 0)
+    }
+
+    private fun exportAdapter(labels: List<String>) = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, labels) {
+        private fun row(position: Int, dropdown: Boolean) = TextView(this@MainActivity).apply {
+            text = getItem(position) + if (dropdown) "" else "   ▾"
+            textSize = 15f; setTextColor(Color.rgb(235, 241, 232)); gravity = android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(14), dp(12), dp(14), dp(12)); minHeight = dp(52)
+            setBackgroundColor(if (dropdown) Color.rgb(28, 36, 29) else Color.TRANSPARENT)
+        }
+        override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, false)
+        override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, true)
     }
 
     private fun refreshChoices() {
