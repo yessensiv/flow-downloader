@@ -16,7 +16,7 @@ import android.widget.*
 import java.io.File
 import java.util.concurrent.Executors
 
-/** First prototype: one job at a time, while the screen is open. */
+/** Screen work stays here; foreground downloads belong to DownloadService. */
 class MainActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val imageWorker = Executors.newSingleThreadExecutor()
@@ -50,6 +50,15 @@ class MainActivity : Activity() {
     private var media: Media? = null
     private var ready: File? = null
     private var choices = emptyList<Choice>()
+    private var followingDownload = false
+    private var pendingShare: String? = null
+    private val main = android.os.Handler(android.os.Looper.getMainLooper())
+    private val downloadPoll = object : Runnable {
+        override fun run() {
+            if (followingDownload) syncDownload()
+            main.postDelayed(this, 500)
+        }
+    }
     private val lime = Color.rgb(194, 255, 112)
     private fun text(ru: String, en: String) = if (english) en else ru
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
@@ -129,12 +138,18 @@ class MainActivity : Activity() {
             val found = media
             if (selected != null && found != null) {
                 ready?.parentFile?.deleteRecursively(); ready = null
-                job(text("Готовим файл…", "Preparing file…")) {
-                    val file = engine.download(found, selected) { value ->
-                        runOnUiThread { progress.isIndeterminate = value < 0; progress.progress = value.toInt().coerceIn(0, 100) }
-                    }
-                    runOnUiThread { ready = file }
-                }
+                if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 20)
+                try {
+                    DownloadService.forgetCompleted()
+                    startForegroundService(Intent(this, DownloadService::class.java).apply {
+                        putExtra("url", found.url); putExtra("title", found.title); putExtra("thumbnail", found.thumbnail)
+                        putExtra("selector", selected.selector); putExtra("label", selected.label)
+                        putExtra("audio", selected.audio); putExtra("mp3", selected.mp3); putExtra("english", english)
+                    })
+                    followingDownload = true; busy = true; saved = false; lastError = ""
+                    refresh(); status.text = text("Готовим файл. Можно свернуть приложение.", "Preparing file. You can leave the app.")
+                } catch (e: Exception) { lastError = e.message.orEmpty(); refresh() }
             }
         }
         resultCard = LinearLayout(this).apply {
@@ -166,6 +181,7 @@ class MainActivity : Activity() {
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                if (!followingDownload) DownloadService.forgetCompleted()
                 media = null; title.text = ""; lastError = ""
                 ready?.parentFile?.deleteRecursively(); ready = null
                 refreshChoices(); refresh()
@@ -173,9 +189,13 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: Editable?) {}
         })
         refresh()
-        job(text("Подготавливаем приложение…", "Setting things up…")) { engine.initialize() }
+        if (DownloadService.state != null) {
+            followingDownload = true; syncDownload()
+        }
+        handleShare(intent)
     }
     private fun switchMode(next: Boolean) {
+        DownloadService.forgetCompleted()
         audio = next; saved = false; ready?.parentFile?.deleteRecursively(); ready = null
         lastError = ""; refreshChoices(); refresh()
     }
@@ -214,7 +234,7 @@ class MainActivity : Activity() {
         details.visibility = if (lastError.isNotEmpty()) View.VISIBLE else View.GONE
         style(language, false); style(mode, !audio); style(audioMode, audio)
         style(analyze, media == null); style(download, true); style(save, true); style(update, false); style(details, false)
-        if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("✓ Файл сохранён в выбранную папку.", "✓ File saved to your chosen folder.") else if (ready != null) text("Готово! Выберите, куда сохранить файл.", "Ready! Choose where to save your file.") else text("Без сервера · Файлы остаются у вас\nНе закрывайте приложение во время загрузки.", "No server · Your files stay with you\nKeep the app open during downloads.")
+        if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("✓ Файл сохранён в выбранную папку.", "✓ File saved to your chosen folder.") else if (ready != null) text("Готово! Выберите, куда сохранить файл.", "Ready! Choose where to save your file.") else text("Без сервера · Загрузка работает в фоне\nВ YouTube нажмите «Поделиться» → Flow.", "No server · Downloads work in the background\nIn YouTube, tap Share → Flow.")
         status.setTextColor(if (lastError.isNotEmpty()) Color.rgb(255, 171, 151) else Color.rgb(175, 190, 174))
     }
     private fun friendlyError(error: String): String = when {
@@ -297,9 +317,62 @@ class MainActivity : Activity() {
                         lastError = error.message ?: "Unknown error"
                         refresh()
                     }
+                    offerPendingShare()
                 }
             }
         }
+    }
+    private fun syncDownload() {
+        val current = DownloadService.state ?: return
+        if (media !== current.media) {
+            input.setText(current.media.url)
+            media = current.media; audio = current.choice.audio
+            title.text = current.media.title; refreshChoices(); loadThumbnail(current.media)
+        }
+        busy = current.running; ready = current.file?.takeIf { it.exists() }; lastError = current.error
+        progress.isIndeterminate = current.progress < 0
+        progress.progress = current.progress.coerceAtLeast(0)
+        refresh()
+        if (busy) status.text = text("Загрузка в фоне", "Downloading in background") + if (current.progress >= 0) " · ${current.progress}%" else "…"
+        else { followingDownload = false; offerPendingShare() }
+    }
+    override fun onStart() {
+        super.onStart()
+        main.post(downloadPoll)
+    }
+    override fun onStop() {
+        main.removeCallbacks(downloadPoll)
+        super.onStop()
+    }
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleShare(intent)
+    }
+    private fun handleShare(incoming: Intent?) {
+        if (incoming?.action != Intent.ACTION_SEND || incoming.type != "text/plain") return
+        val shared = incoming.getStringExtra(Intent.EXTRA_TEXT).orEmpty().take(8192)
+        val url = Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE).findAll(shared)
+            .mapNotNull { runCatching { engine.canonicalUrl(it.value.trimEnd('.', ',', ')', ']')) }.getOrNull() }.firstOrNull()
+        incoming.action = null
+        if (url == null) {
+            Toast.makeText(this, text("В сообщении нет ссылки YouTube.", "No YouTube link in the shared text."), Toast.LENGTH_LONG).show()
+            return
+        }
+        if (busy || ready != null) {
+            pendingShare = url
+            Toast.makeText(this, text("Ссылка принята. Текущая загрузка не прервана.", "Link received. Your current download is safe."), Toast.LENGTH_LONG).show()
+            if (!busy) offerPendingShare()
+        } else input.setText(url)
+    }
+    private fun offerPendingShare() {
+        val url = pendingShare ?: return
+        if (busy || isFinishing || isDestroyed) return
+        pendingShare = null
+        AlertDialog.Builder(this).setTitle(text("Открыть новую ссылку?", "Open the shared link?"))
+            .setMessage(text("Сначала сохраните готовый файл, если он нужен. Новая ссылка заменит текущий результат.", "Save the prepared file first if you need it. The new link replaces the current result."))
+            .setPositiveButton(text("Открыть", "Open")) { _, _ -> input.setText(url) }
+            .setNegativeButton(text("Позже", "Later")) { _, _ -> pendingShare = url }.show()
     }
     @Deprecated("Used for the minimal prototype")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
@@ -327,6 +400,8 @@ class MainActivity : Activity() {
         super.onDestroy()
         worker.shutdownNow()
         imageWorker.shutdownNow()
-        Thread { com.yausername.youtubedl_android.YoutubeDL.getInstance().destroyProcessById("flow-download"); com.yausername.youtubedl_android.YoutubeDL.getInstance().destroyProcessById("flow-analyze") }.start()
+        main.removeCallbacks(downloadPoll)
+        if (DownloadService.state?.running != true)
+            Thread { com.yausername.youtubedl_android.YoutubeDL.getInstance().destroyProcessById("flow-analyze") }.start()
     }
 }
