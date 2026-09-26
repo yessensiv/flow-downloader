@@ -24,6 +24,9 @@ object DesignChecks {
                 check((field("advancedFields").get(activity) as View).visibility == View.GONE)
                 (field("advancedToggle").get(activity) as Button).performClick()
                 check((field("advancedFields").get(activity) as View).visibility == View.VISIBLE)
+                val advanced = field("advancedFields").get(activity) as LinearLayout
+                check(advanced.paddingTop > 0)
+                check((advanced.getChildAt(1).layoutParams as LinearLayout.LayoutParams).topMargin > 0)
                 (field("settingsDialog").get(activity) as android.app.Dialog).dismiss()
             }
             instrumentation.waitForIdleSync()

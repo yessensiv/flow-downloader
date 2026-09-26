@@ -253,7 +253,9 @@ class MainActivity : Activity() {
         }
         advancedFields = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; visibility = View.GONE
-            addView(embedMetadata); addView(embedCover)
+            setPadding(0, dp(12), 0, 0)
+            addView(embedMetadata, LinearLayout.LayoutParams(-1, -2))
+            addView(embedCover, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
         }
         advancedToggle = button("") {
             advancedFields.visibility = if (advancedFields.visibility == View.VISIBLE) View.GONE else View.VISIBLE
