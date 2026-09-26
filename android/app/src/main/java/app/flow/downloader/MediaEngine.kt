@@ -8,7 +8,8 @@ import com.yausername.ffmpeg.FFmpeg
 import org.json.JSONObject
 import java.io.File
 
-data class Choice(val selector: String, val label: String, val audio: Boolean, val mp3: Boolean = false, val extractAudio: Boolean = false)
+data class Choice(val selector: String, val label: String, val audio: Boolean, val mp3: Boolean = false, val extractAudio: Boolean = false,
+    val format: String = "", val bitrate: Int = 192, val metadata: Boolean = false, val cover: Boolean = false)
 data class Media(val url: String, val title: String, val choices: List<Choice>, val thumbnail: String = "")
 
 class MediaEngine(private val context: Context) {
@@ -75,9 +76,11 @@ class MediaEngine(private val context: Context) {
                     "${row.optInt("height")}p · ${row.optDouble("fps", 0.0).toInt()} fps", false)
             }.toMutableList()
         audioSources.maxByOrNull { it.optDouble("abr", it.optDouble("tbr", 0.0)) }?.let { track ->
-            val audioLabel = if (extractAudio) "M4A · только звук" else track.optString("ext").uppercase()
+            val audioLabel = if (extractAudio) "M4A · только звук" else track.optString("ext").uppercase() + " · original"
             choices += Choice(track.getString("format_id"), audioLabel, true, extractAudio = extractAudio)
-            choices += Choice(track.getString("format_id"), "MP3 · 192 kbps", true, mp3 = true, extractAudio = extractAudio)
+            listOf("mp3", "m4a", "opus", "flac", "wav").forEach { format ->
+                choices += Choice(track.getString("format_id"), format.uppercase(), true, format = format)
+            }
         }
         require(choices.isNotEmpty()) { "EMPTY" }
         return Media(url, json.optString("title", "YouTube"), choices, json.optString("thumbnail"))
@@ -92,23 +95,42 @@ class MediaEngine(private val context: Context) {
             val fresh = analyze(media.url)
             val replacement = fresh.choices.firstOrNull { it.label == choice.label && it.audio == choice.audio && it.mp3 == choice.mp3 }
                 ?: error("FORMAT_CHANGED")
-            return downloadOnce(fresh, replacement, progress)
+            return downloadOnce(fresh, replacement.copy(format = choice.format, bitrate = choice.bitrate, metadata = choice.metadata, cover = choice.cover), progress)
         }
     }
     private fun downloadOnce(media: Media, choice: Choice, progress: (Float, Long, String) -> Unit): File {
         val dir = File(context.cacheDir, "download-${System.currentTimeMillis()}").apply { mkdirs() }
         try {
-            val req = request(media.url).apply {
+            val req = exportRequest(media, choice, dir)
+            YoutubeDL.getInstance().execute(req, "flow-download") { value, eta, line -> progress(value, eta, line) }
+            return dir.listFiles()?.singleOrNull { it.isFile && it.extension in listOf("mp4", "mkv", "webm", "m4a", "mp3", "opus", "flac", "wav") }
+                ?: error("EMPTY")
+        } catch (error: Exception) { dir.deleteRecursively(); throw error }
+    }
+    internal fun exportRequest(media: Media, choice: Choice, dir: File): YoutubeDLRequest = request(media.url).apply {
                 addOption("-f", choice.selector)
                 addOption("-o", File(dir, "flow.%(ext)s").absolutePath)
                 addOption("--max-filesize", "2G")
-                if (!choice.audio) addOption("--merge-output-format", "mkv")
-                if (choice.mp3) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
+                if (!choice.audio) {
+                    val container = choice.format.ifBlank { "mkv" }
+                    addOption("--merge-output-format", container)
+                    addOption("--remux-video", container)
+                }
+                if (choice.audio && choice.format.isNotEmpty()) {
+                    addOption("-x"); addOption("--audio-format", choice.format)
+                    if (choice.format in listOf("mp3", "m4a", "opus")) {
+                        // A different intermediate container prevents yt-dlp from skipping an
+                        // already-matching codec, so the selected bitrate is always applied.
+                        addOption("--use-postprocessor", "FFmpegVideoRemuxer:preferedformat=mka")
+                        addOption("--audio-quality", "${choice.bitrate}K")
+                        addOption("--postprocessor-args", "ExtractAudio+ffmpeg_o:-c:a ${when (choice.format) { "mp3" -> "libmp3lame"; "opus" -> "libopus"; else -> "aac" }} -b:a ${choice.bitrate}k")
+                    }
+                }
+                else if (choice.mp3) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
                 else if (choice.extractAudio) { addOption("-x"); addOption("--audio-format", "m4a"); addOption("--audio-quality", "0") }
-            }
-            YoutubeDL.getInstance().execute(req, "flow-download") { value, eta, line -> progress(value, eta, line) }
-            return dir.listFiles()?.singleOrNull { it.isFile && it.extension in listOf("mp4", "mkv", "webm", "m4a", "mp3", "opus") }
-                ?: error("EMPTY")
-        } catch (error: Exception) { dir.deleteRecursively(); throw error }
+                if (choice.metadata) addOption("--embed-metadata")
+                if (choice.cover) {
+                    addOption("--embed-thumbnail"); addOption("--convert-thumbnails", "jpg")
+                }
     }
 }

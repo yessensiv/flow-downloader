@@ -31,6 +31,13 @@ class MainActivity : Activity() {
     private lateinit var cancelDownload: Button
     private lateinit var title: TextView
     private lateinit var spinner: Spinner
+    private lateinit var bitrateSpinner: Spinner
+    private lateinit var bitrateLabel: TextView
+    private lateinit var containerSpinner: Spinner
+    private lateinit var containerLabel: TextView
+    private lateinit var embedCover: Switch
+    private lateinit var embedMetadata: Switch
+    private val bitrates = listOf(64, 96, 128, 160, 192, 256, 320)
     private lateinit var progress: ProgressBar
     private lateinit var analyze: Button
     private lateinit var download: Button
@@ -156,8 +163,36 @@ class MainActivity : Activity() {
         qualityLabel = label("", 14).apply { setTextColor(Color.rgb(175, 190, 174)); setPadding(0, 0, 0, dp(6)) }
         spinner = Spinner(this).apply { background = surface(); minimumHeight = dp(56); setPadding(dp(10), 0, dp(10), 0) }
         root.addView(spinner)
+        val exportPrefs = getSharedPreferences("export", MODE_PRIVATE)
+        containerLabel = label("", 14)
+        containerSpinner = Spinner(this).apply {
+            background = surface(); minimumHeight = dp(54)
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("MKV", "MP4"))
+        }
+        bitrateLabel = label("", 14)
+        bitrateSpinner = Spinner(this).apply {
+            background = surface(); minimumHeight = dp(54)
+            adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, bitrates.map { "$it kbps" })
+            setSelection(bitrates.indexOf(exportPrefs.getInt("bitrate", 192)).coerceAtLeast(0))
+        }
+        embedMetadata = Switch(this).apply {
+            setTextColor(Color.WHITE); isChecked = exportPrefs.getBoolean("metadata", true)
+            setOnCheckedChangeListener { _, checked -> exportPrefs.edit().putBoolean("metadata", checked).apply() }
+        }
+        embedCover = Switch(this).apply {
+            setTextColor(Color.WHITE); isChecked = exportPrefs.getBoolean("cover", true)
+            setOnCheckedChangeListener { _, checked -> exportPrefs.edit().putBoolean("cover", checked).apply() }
+        }
+        spinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { refreshExportOptions() }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
         download = button("") {
-            val selected = choices.getOrNull(spinner.selectedItemPosition)
+            val selected = choices.getOrNull(spinner.selectedItemPosition)?.copy(
+                format = if (audio) choices.getOrNull(spinner.selectedItemPosition)?.format.orEmpty() else if (containerSpinner.selectedItemPosition == 1) "mp4" else "mkv",
+                bitrate = bitrates.getOrElse(bitrateSpinner.selectedItemPosition) { 192 },
+                metadata = embedMetadata.isChecked, cover = embedCover.isEnabled && embedCover.isChecked)
+            exportPrefs.edit().putInt("bitrate", selected?.bitrate ?: 192).apply()
             val found = media
             if (selected != null && found != null) {
                 ready?.parentFile?.deleteRecursively(); ready = null
@@ -170,6 +205,8 @@ class MainActivity : Activity() {
                         putExtra("selector", selected.selector); putExtra("label", selected.label)
                         putExtra("audio", selected.audio); putExtra("mp3", selected.mp3)
                         putExtra("extractAudio", selected.extractAudio); putExtra("english", english)
+                        putExtra("format", selected.format); putExtra("bitrate", selected.bitrate)
+                        putExtra("metadata", selected.metadata); putExtra("cover", selected.cover)
                     })
                     followingDownload = true; busy = true; saved = false; lastError = ""
                     refresh(); status.text = text("Готовим файл. Можно свернуть приложение.", "Preparing file. You can leave the app.")
@@ -180,7 +217,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             background = surface(); setPadding(dp(20), dp(20), dp(20), dp(12))
         }
-        listOf(resultLabel, thumbnail, title, qualityLabel, spinner, download).forEach {
+        listOf(resultLabel, thumbnail, title, qualityLabel, spinner, containerLabel, containerSpinner, bitrateLabel, bitrateSpinner, embedMetadata, embedCover, download).forEach {
             root.removeView(it); resultCard.addView(it, LinearLayout.LayoutParams(-1, if (it == download || it == spinner) dp(54) else -2).apply { bottomMargin = dp(10) })
         }
         root.addView(resultCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22); bottomMargin = dp(14) })
@@ -201,7 +238,7 @@ class MainActivity : Activity() {
         save = button("") {
             if (saved || busy) return@button
             val file = ready ?: return@button
-            val mime = when (file.extension) { "mp3" -> "audio/mpeg"; "m4a" -> "audio/mp4"; "mkv" -> "video/x-matroska"; "mp4" -> "video/mp4"; "webm" -> if (audio) "audio/webm" else "video/webm"; else -> "application/octet-stream" }
+            val mime = MediaStorage.mime(file, audio)
             exportTitle = media?.title ?: "Flow"
             exportMime = mime
             exportThumbnail = media?.thumbnail.orEmpty()
@@ -295,8 +332,9 @@ class MainActivity : Activity() {
         style(historyButton, false)
         listOf(mode, audioMode, input, analyze, update).forEach { it.isEnabled = !busy }
         spinner.isEnabled = !busy && choices.isNotEmpty()
+        refreshExportOptions()
         download.isEnabled = !busy && choices.isNotEmpty()
-        save.visibility = if (ready != null && !busy) View.VISIBLE else View.GONE
+        save.visibility = if (ready != null && !busy && !saved) View.VISIBLE else View.GONE
         save.isEnabled = !busy && !saved
         title.visibility = if (media != null) View.VISIBLE else View.GONE
         val wasCardVisible = resultCard.visibility == View.VISIBLE
@@ -306,7 +344,7 @@ class MainActivity : Activity() {
         download.visibility = if (media != null && ready == null) View.VISIBLE else View.GONE
         progress.visibility = if (busy) View.VISIBLE else View.GONE
         cancelDownload.text = text("✕  Отменить загрузку", "✕  Cancel download")
-        cancelDownload.visibility = if (busy && DownloadService.state?.running == true) View.VISIBLE else View.GONE
+        cancelDownload.visibility = if (busy && DownloadService.state?.running == true && DownloadService.state?.saving != true) View.VISIBLE else View.GONE
         details.text = text("Подробности ошибки", "Error details")
         details.visibility = if (lastError.isNotEmpty()) View.VISIBLE else View.GONE
         style(language, false); style(mode, !audio); style(audioMode, audio)
@@ -323,10 +361,30 @@ class MainActivity : Activity() {
         error.contains("update", true) -> text("Не удалось обновить обработчик. Проверьте интернет и повторите обновление.", "Could not update the engine. Check your connection and retry the update.")
         else -> text("Не удалось завершить операцию. Подробности доступны ниже.", "Could not finish. Error details are available below.")
     }
+    private fun refreshExportOptions() {
+        if (!::embedCover.isInitialized) return
+        val choice = choices.getOrNull(spinner.selectedItemPosition)
+        containerLabel.text = text("Формат видео", "Video format")
+        containerLabel.visibility = if (audio) View.GONE else View.VISIBLE
+        containerSpinner.visibility = containerLabel.visibility
+        containerSpinner.isEnabled = !busy
+        val lossy = choice?.audio == true && choice.format in listOf("mp3", "m4a", "opus")
+        bitrateLabel.text = text("Битрейт (выше не значит лучше исходника)", "Bitrate (cannot improve the source)")
+        bitrateLabel.visibility = if (lossy) View.VISIBLE else View.GONE
+        bitrateSpinner.visibility = bitrateLabel.visibility
+        bitrateSpinner.isEnabled = !busy
+        val supportsCover = choice != null && (!choice.audio || choice.format in listOf("mp3", "m4a", "opus", "flac") || (choice.format.isEmpty() && (choice.extractAudio || choice.label.substringBefore(" ·") in listOf("M4A", "MP3", "OPUS"))))
+        embedCover.text = if (supportsCover) text("Встроить обложку", "Embed cover art") else text("Обложка недоступна в этом формате", "Cover art unavailable for this format")
+        embedCover.isEnabled = !busy && supportsCover
+        embedCover.alpha = if (supportsCover) 1f else .45f
+        embedMetadata.text = text("Встроить метаданные", "Embed metadata")
+        embedMetadata.isEnabled = !busy
+    }
+
     private fun refreshChoices() {
         choices = media?.choices?.filter { it.audio == audio } ?: emptyList()
         val labels = choices.map { choice ->
-            if (choice.extractAudio && !choice.mp3) text("M4A · только звук", "M4A · audio only") else choice.label
+            if (choice.extractAudio && choice.format.isEmpty() && !choice.mp3) text("M4A · только звук", "M4A · audio only") else choice.label.replace("original", text("оригинал", "original"))
         }.ifEmpty {
             listOf(if (audio) text("Аудио для этого видео недоступно", "Audio is unavailable for this video")
                 else text("Нет доступных форматов", "No formats available"))
@@ -414,6 +472,7 @@ class MainActivity : Activity() {
             title.text = current.media.title; refreshChoices(); loadThumbnail(current.media)
         }
         busy = current.running; ready = current.file?.takeIf { it.exists() }; lastError = current.error
+        saved = current.savedUri.isNotEmpty() || saved
         progress.isIndeterminate = current.running && current.progress < 0
         progress.setProgress(current.progress.coerceAtLeast(0), motionEnabled())
         refresh()
@@ -426,7 +485,11 @@ class MainActivity : Activity() {
             val details = parts.joinToString(" · ").ifBlank { text("Вычисляем скорость и время…", "Calculating speed and time…") }
             status.text = (current.stage.ifBlank { text("Загрузка", "Downloading") }) + "\n" + details
         }
-        else { followingDownload = false; offerPendingShare() }
+        else {
+            followingDownload = false
+            if (android.os.Build.VERSION.SDK_INT < 29 && ready != null && !saved && lastError.isEmpty()) save.performClick()
+            offerPendingShare()
+        }
     }
     private fun formatDuration(seconds: Long): String = when {
         seconds < 60 -> text("${seconds} сек", "${seconds}s")
@@ -458,6 +521,7 @@ class MainActivity : Activity() {
                     put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
                 }, null, null) == 1) { "Could not finish media file" }
                 DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), safeTitle, mime, file.length(), System.currentTimeMillis(), exportThumbnail))
+                DownloadService.markSaved(file, uri.toString())
                 runOnUiThread { if (!isDestroyed) saved = true }
             } catch (e: Exception) {
                 uri?.let { runCatching { contentResolver.delete(it, null, null) } }
@@ -529,6 +593,7 @@ class MainActivity : Activity() {
             }.isSuccess
             runOnUiThread {
                 saved = true
+                DownloadService.markSaved(file, uri.toString())
                 if (!retained || !recorded) Toast.makeText(this,
                     text("Файл сохранён. Постоянный доступ через историю недоступен; откройте файл из выбранной папки.",
                         "File saved. Persistent history access is unavailable; open it from your chosen folder."), Toast.LENGTH_LONG).show()

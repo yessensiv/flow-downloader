@@ -21,7 +21,8 @@ Flow prepares video and audio directly on your phone and keeps your saved files 
 | | What you can do |
 | --- | --- |
 | Video | Choose available quality and frame rate, up to 2160p when offered by the source. |
-| Audio | Save an available source audio format or convert to MP3 at 192 kbps. |
+| Audio | Keep the source audio or choose MP3, M4A, Opus, FLAC or WAV; select 64–320 kbps for MP3/M4A/Opus. |
+| File details | Optional embedded cover art and metadata; MKV/MP4 video containers. Cover support depends on the format. |
 | Progress | See percentage, speed and estimated time remaining when available; cancel from the app or notification. |
 | Background downloads | Continue preparing a file while using another app, with a foreground service notification. |
 | My downloads | Browse separate video and music tabs with thumbnails and title search. |
@@ -31,13 +32,13 @@ Flow prepares video and audio directly on your phone and keeps your saved files 
 
 ## Get started
 
-The current project version is **0.19.0**. On your phone, tap **[Download APK](https://github.com/yessensiv/flow-downloader/releases/latest/download/Flow.apk)** and open the downloaded file. Allow installation from your browser if Android asks. This is a debug build; no computer or build tools are needed to install it.
+The current project version is **0.20.0**. On your phone, tap **[Download APK](https://github.com/yessensiv/flow-downloader/releases/latest/download/Flow.apk)** for the latest published build and open the downloaded file. Allow installation from your browser if Android asks. This is a debug build; no computer or build tools are needed to install it.
 
 1. Download the APK using the button above, or build it using [Android Studio or the Windows scripts](#build-the-android-app).
 2. Copy the APK to your phone and open it. Allow installation from that source if Android asks, or install through USB as described below.
 3. Open Flow and paste a link, or use **YouTube → Share → Flow**.
 4. Choose **Video** or **Audio**, tap **Show options**, then choose a quality or format.
-5. Prepare the file and save it. Find it again in **My downloads**.
+5. Start downloading. Android 10+ saves the finished file automatically to Flow's system folder, including in the background. Android 8–9 opens the system save picker. Find saved files in **My downloads**.
 
 **Selecting several files:** hold any saved item, then tap the others. Use the group actions to share or delete. Cancel selection or remove the last checkmark to return to normal browsing. Deleting a file from the device requires confirmation.
 
@@ -94,7 +95,7 @@ Use the same command to update an installed build signed with the same key. Thes
 ## Good to know
 
 - **Quality depends on the source.** Flow does not upscale video. Converting to MP3 at 192 kbps does not improve the original audio quality.
-- **Video and sound may use MKV.** Separate video and audio streams are merged into MKV; playback support depends on the player and codecs.
+- **Choose MKV or MP4 for video.** Playback support depends on the player and source codecs; changing the container does not change the video codec.
 - **One file is processed at a time.** Downloads depend on YouTube availability and your connection. Private videos, live streams and content requiring sign-in may not work.
 - **Background work has limits.** Android battery restrictions or force-stopping Flow can interrupt a download. An active task does not resume after a reboot or force stop.
 - **YouTube changes can affect downloads.** Try the app's engine update action when extraction fails. Updates cannot guarantee that every link will work.
