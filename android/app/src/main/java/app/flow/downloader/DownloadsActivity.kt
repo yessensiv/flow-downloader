@@ -2,6 +2,7 @@ package app.flow.downloader
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.Intent
 import android.graphics.Color
@@ -26,6 +27,15 @@ class DownloadsActivity : Activity() {
     private fun text(ru: String, en: String) = if (english) en else ru
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private val lime = Color.rgb(194, 255, 112)
+    private fun animateRows() {
+        if (!ValueAnimator.areAnimatorsEnabled()) return
+        (0 until list.childCount).forEach { index ->
+            val child = list.getChildAt(index)
+            child.alpha = 0f; child.translationY = dp(6).toFloat()
+            child.animate().alpha(1f).translationY(0f).setStartDelay(index * 28L).setDuration(200L)
+                .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        }
+    }
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         english = intent.getBooleanExtra("english", false)
@@ -50,7 +60,15 @@ class DownloadsActivity : Activity() {
     private fun action(value: String, click: () -> Unit) = Button(this).apply {
         text = value; textSize = 14f; isAllCaps = false; setTextColor(lime)
         background = GradientDrawable().apply { setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(12).toFloat() }
-        minHeight = dp(48); setOnClickListener { click() }
+        minHeight = dp(48)
+        setOnTouchListener { view, event ->
+            if (ValueAnimator.areAnimatorsEnabled()) when (event.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> view.animate().scaleX(.98f).scaleY(.98f).setDuration(75L).start()
+                android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> view.animate().scaleX(1f).scaleY(1f).setDuration(120L).start()
+            }
+            false
+        }
+        setOnClickListener { click() }
     }
     private fun render() {
         list.removeAllViews()
@@ -95,6 +113,7 @@ class DownloadsActivity : Activity() {
             card.addView(actions)
             list.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
         }
+        animateRows()
     }
     private fun removeEntry(item: SavedDownload) {
         AlertDialog.Builder(this).setTitle(text("Убрать из истории?", "Remove from history?"))

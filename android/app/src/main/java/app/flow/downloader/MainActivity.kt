@@ -11,7 +11,9 @@ import android.content.res.ColorStateList
 import android.text.Editable
 import android.text.TextWatcher
 import android.view.View
+import android.view.MotionEvent
 import android.view.WindowManager
+import android.animation.ValueAnimator
 import android.widget.*
 import java.io.File
 import java.util.concurrent.Executors
@@ -197,18 +199,43 @@ class MainActivity : Activity() {
             override fun afterTextChanged(s: Editable?) {}
         })
         refresh()
+        animateEntrance(listOf(brand, heading, subtitle, mode.parent as View, linkLabel, input, analyze), 24L)
         if (DownloadService.state != null) {
             followingDownload = true; syncDownload()
         }
         handleShare(intent)
     }
     private fun switchMode(next: Boolean) {
+        if (audio == next) return
         DownloadService.forgetCompleted()
         audio = next; saved = false; ready?.parentFile?.deleteRecursively(); ready = null
         lastError = ""; refreshChoices(); refresh()
+        if (motionEnabled()) {
+            val selected = if (next) audioMode else mode
+            selected.animate().cancel()
+            selected.scaleX = .97f; selected.scaleY = .97f
+            selected.animate().scaleX(1f).scaleY(1f).setDuration(180L)
+                .setInterpolator(android.view.animation.OvershootInterpolator(1.15f)).start()
+        }
     }
     private fun surface(color: Int = Color.rgb(28, 36, 29)) = GradientDrawable().apply {
         setColor(color); cornerRadius = dp(16).toFloat(); setStroke(dp(1), Color.rgb(49, 62, 49))
+    }
+    private fun motionEnabled() = ValueAnimator.areAnimatorsEnabled()
+    private fun animateEntrance(views: List<View>, offset: Long = 0L) {
+        if (!motionEnabled()) return
+        views.filter { it.visibility == View.VISIBLE }.forEachIndexed { index, view ->
+            view.alpha = 0f; view.translationY = dp(8).toFloat()
+            view.animate().cancel()
+            view.animate().alpha(1f).translationY(0f).setStartDelay(offset + index * 35L)
+                .setDuration(230L).setInterpolator(android.view.animation.DecelerateInterpolator()).start()
+        }
+    }
+    private fun revealResultCard() {
+        if (!motionEnabled()) return
+        resultCard.alpha = 0f; resultCard.translationY = dp(10).toFloat()
+        resultCard.animate().alpha(1f).translationY(0f).setDuration(260L)
+            .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
     }
     private fun style(button: Button, primary: Boolean) {
         button.background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(Color.argb(45, 255, 255, 255)), surface(if (primary) lime else Color.rgb(28, 36, 29)), null)
@@ -236,7 +263,9 @@ class MainActivity : Activity() {
         download.isEnabled = !busy && choices.isNotEmpty()
         save.visibility = if (ready != null && !busy) View.VISIBLE else View.GONE
         title.visibility = if (media != null) View.VISIBLE else View.GONE
+        val wasCardVisible = resultCard.visibility == View.VISIBLE
         resultCard.visibility = title.visibility
+        if (!wasCardVisible && resultCard.visibility == View.VISIBLE) revealResultCard()
         qualityLabel.visibility = title.visibility; spinner.visibility = title.visibility
         download.visibility = if (media != null && ready == null) View.VISIBLE else View.GONE
         progress.visibility = if (busy) View.VISIBLE else View.GONE
@@ -341,7 +370,7 @@ class MainActivity : Activity() {
         }
         busy = current.running; ready = current.file?.takeIf { it.exists() }; lastError = current.error
         progress.isIndeterminate = current.progress < 0
-        progress.progress = current.progress.coerceAtLeast(0)
+        progress.setProgress(current.progress.coerceAtLeast(0), motionEnabled())
         refresh()
         if (busy) status.text = text("Загрузка в фоне", "Downloading in background") + if (current.progress >= 0) " · ${current.progress}%" else "…"
         else { followingDownload = false; offerPendingShare() }
@@ -422,6 +451,13 @@ class MainActivity : Activity() {
         text = value; textSize = 16f; isAllCaps = false; setTextColor(Color.rgb(20, 28, 16))
         background = GradientDrawable().apply { setColor(lime); cornerRadius = dp(16).toFloat() }
         root.addView(this, LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(12); bottomMargin = dp(8) })
+        setOnTouchListener { view, event ->
+            if (motionEnabled()) when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> view.animate().scaleX(.985f).scaleY(.985f).setDuration(80L).start()
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> view.animate().scaleX(1f).scaleY(1f).setDuration(130L).start()
+            }
+            false
+        }
         setOnClickListener { action() }
     }
     override fun onDestroy() {
