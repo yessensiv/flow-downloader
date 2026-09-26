@@ -32,7 +32,6 @@ class DownloadsActivity : Activity() {
     private lateinit var selectionBar: LinearLayout
     private lateinit var selectionCount: TextView
     private lateinit var selectAll: CheckBox
-    private lateinit var selectionButton: Button
     private lateinit var search: EditText
     private lateinit var history: DownloadHistory
     private var english = false
@@ -125,8 +124,7 @@ class DownloadsActivity : Activity() {
     private fun buildHeader() {
         val navigation = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
         navigation.addView(action(text("‹  Назад", "‹  Back")) { finish() }, LinearLayout.LayoutParams(dp(110), dp(48)))
-        selectionButton = action(text("Выбрать", "Select")) { toggleSelectionMode() }.apply { gravity = android.view.Gravity.CENTER }
-        navigation.addView(selectionButton, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(8) })
+        navigation.addView(Space(this), LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(8) })
         list.addView(navigation, LinearLayout.LayoutParams(-1, dp(48)))
         list.addView(label(text("Мои загрузки", "My downloads"), 28))
         list.addView(label(text("Видео и музыка — каждый файл на своём месте.",
@@ -201,6 +199,17 @@ class DownloadsActivity : Activity() {
                 background = rowBackground(item.uri in selectedUris)
                 isClickable = true; isFocusable = true
                 setOnClickListener { if (selecting) toggleSelected(item) else access(item, false) }
+                setOnLongClickListener {
+                    if (!selecting) {
+                        selecting = true
+                        selectedUris.clear()
+                        selectedUris.add(item.uri)
+                        renderItems()
+                    } else {
+                        toggleSelected(item)
+                    }
+                    true
+                }
             }
             if (selecting) {
                 row.addView(CheckBox(this).apply {
@@ -209,6 +218,41 @@ class DownloadsActivity : Activity() {
                     tag = "selection-checkbox"
                     isClickable = false; isFocusable = false
                 }, LinearLayout.LayoutParams(dp(30), dp(42)).apply { rightMargin = dp(4) })
+            } else {
+                row.setOnTouchListener(object : View.OnTouchListener {
+                    private val handler = android.os.Handler(mainLooper)
+                    private var longPressed = false
+                    private var downX = 0f
+                    private var downY = 0f
+                    private val longPress = Runnable {
+                        longPressed = true
+                        row.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                        selecting = true
+                        selectedUris.clear()
+                        selectedUris.add(item.uri)
+                        renderItems()
+                    }
+                    override fun onTouch(view: View, event: android.view.MotionEvent): Boolean {
+                        when (event.actionMasked) {
+                            android.view.MotionEvent.ACTION_DOWN -> {
+                                downX = event.x; downY = event.y; longPressed = false
+                                handler.postDelayed(longPress, android.view.ViewConfiguration.getLongPressTimeout().toLong())
+                            }
+                            android.view.MotionEvent.ACTION_MOVE -> {
+                                if (kotlin.math.abs(event.x - downX) > dp(12) || kotlin.math.abs(event.y - downY) > dp(12)) handler.removeCallbacks(longPress)
+                            }
+                            android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                                handler.removeCallbacks(longPress)
+                                if (longPressed) return true
+                            }
+                        }
+                        if (longPressed) {
+                            if (event.actionMasked == android.view.MotionEvent.ACTION_UP) view.performClick()
+                            return true
+                        }
+                        return false
+                    }
+                })
             }
             val thumbnail = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
@@ -281,13 +325,19 @@ class DownloadsActivity : Activity() {
 
     private fun toggleSelected(item: SavedDownload) {
         if (item.uri in selectedUris) selectedUris.remove(item.uri) else selectedUris.add(item.uri)
+        if (selectedUris.isEmpty()) selecting = false
         updateSelectionUi(visibleItems())
     }
 
     private fun updateSelectionUi(visible: List<SavedDownload>) {
-        selectionButton.text = if (selecting) text("Отмена", "Cancel") else text("Выбрать", "Select")
-        selectionButton.isEnabled = !deleting
-        selectionBar.visibility = if (selecting) View.VISIBLE else View.GONE
+        selectionBar.visibility = if (selecting && selectedUris.isNotEmpty()) View.VISIBLE else View.GONE
+        val navigation = list.getChildAt(0) as? LinearLayout
+        navigation?.getChildAt(0)?.let { button ->
+            (button as? Button)?.apply {
+                text = if (selecting) text("‹  Отмена", "‹  Cancel") else text("‹  Назад", "‹  Back")
+                setOnClickListener { if (selecting) toggleSelectionMode() else finish() }
+            }
+        }
         if (!selecting) return
         selectAll.setOnCheckedChangeListener(null)
         val visibleUris = visible.map { it.uri }
