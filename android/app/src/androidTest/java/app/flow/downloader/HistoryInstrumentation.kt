@@ -7,12 +7,14 @@ import android.os.Bundle
 /** Device checks without additional test dependencies. Never touches real history or files. */
 class HistoryInstrumentation : Instrumentation() {
     private var exportChecks = false
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); exportChecks = arguments?.getString("exports") == "true"; start() }
+    private var designChecks = false
+    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); exportChecks = arguments?.getString("exports") == "true"; designChecks = arguments?.getString("design") == "true"; start() }
     override fun onStart() {
         val name = "history_test_${System.nanoTime()}"
         val preferences = targetContext.getSharedPreferences(name, 0)
         val result = Bundle()
         try {
+            if (designChecks) DesignChecks.run(this)
             if (exportChecks) ExportChecks.run(context, targetContext)
             val store = DownloadHistory(targetContext, name)
             check(store.list().isEmpty())

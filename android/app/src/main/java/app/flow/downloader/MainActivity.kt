@@ -34,6 +34,11 @@ class MainActivity : Activity() {
     private lateinit var bitrateSpinner: Spinner
     private lateinit var bitrateLabel: TextView
     private lateinit var bitrateHint: TextView
+    private lateinit var exportSummary: Button
+    private lateinit var exportFields: LinearLayout
+    private lateinit var advancedFields: LinearLayout
+    private lateinit var advancedToggle: Button
+    private var settingsDialog: android.app.Dialog? = null
     private var exportLanguage: Boolean? = null
     private lateinit var containerSpinner: Spinner
     private lateinit var containerLabel: TextView
@@ -106,8 +111,8 @@ class MainActivity : Activity() {
             addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
             addView(language, LinearLayout.LayoutParams(dp(90), dp(44)))
         })
-        heading = label("", 30).apply { setPadding(0, dp(28), 0, dp(6)); setLineSpacing(dp(3).toFloat(), 1f) }
-        subtitle = label("", 16).apply { setTextColor(Color.rgb(170, 185, 169)); setPadding(0, 0, 0, dp(20)) }
+        heading = label("", 24).apply { setPadding(0, dp(16), 0, dp(4)) }
+        subtitle = label("", 14).apply { setTextColor(Color.rgb(170, 185, 169)); setPadding(0, 0, 0, dp(8)) }
         mode = button("") { switchMode(false) }
         audioMode = button("") { switchMode(true) }
         root.removeView(mode); root.removeView(audioMode)
@@ -161,7 +166,7 @@ class MainActivity : Activity() {
             background = surface(Color.rgb(15, 20, 16)); clipToOutline = true
             visibility = View.GONE
         }
-        title = label("", 21).apply { setPadding(0, 0, 0, dp(16)); setTypeface(null, Typeface.BOLD); setLineSpacing(dp(3).toFloat(), 1f) }
+        title = label("", 18).apply { setPadding(0, 0, 0, dp(4)); setTypeface(null, Typeface.BOLD); maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         qualityLabel = label("", 14).apply { setTextColor(Color.rgb(175, 190, 174)); setPadding(0, 0, 0, dp(6)) }
         spinner = Spinner(this).apply { background = surface(); minimumHeight = dp(56); setPadding(dp(10), 0, dp(10), 0) }
         root.addView(spinner)
@@ -241,10 +246,34 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             background = surface(); setPadding(dp(20), dp(20), dp(20), dp(12))
         }
-        listOf(resultLabel, thumbnail, title, qualityLabel, spinner, containerLabel, containerSpinner, bitrateLabel, bitrateSpinner, bitrateHint, embedMetadata, embedCover, download).forEach {
+        exportFields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        listOf(qualityLabel, spinner, containerLabel, containerSpinner, bitrateLabel, bitrateSpinner, bitrateHint).forEach {
+            root.removeView(it)
+            exportFields.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        }
+        advancedFields = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; visibility = View.GONE
+            addView(embedMetadata); addView(embedCover)
+        }
+        advancedToggle = button("") {
+            advancedFields.visibility = if (advancedFields.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+            refreshExportOptions()
+        }
+        root.removeView(advancedToggle)
+        exportFields.addView(advancedToggle, LinearLayout.LayoutParams(-1, dp(48)))
+        exportFields.addView(advancedFields)
+        exportSummary = button("") { showExportSettings() }.apply {
+            gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(16), 0, dp(16), 0); textSize = 14f
+        }
+        containerSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { refreshExportOptions() }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+        listOf(resultLabel, thumbnail, title, exportSummary, download).forEach {
             root.removeView(it); resultCard.addView(it, LinearLayout.LayoutParams(-1, if (it == download || it is Spinner) dp(54) else -2).apply { bottomMargin = dp(if (it == qualityLabel || it == bitrateLabel || it == containerLabel) 4 else 10) })
         }
-        root.addView(resultCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22); bottomMargin = dp(14) })
+        root.addView(resultCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(8) })
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
         progress.progressTintList = ColorStateList.valueOf(lime)
         progress.indeterminateTintList = ColorStateList.valueOf(lime)
@@ -372,7 +401,7 @@ class MainActivity : Activity() {
         details.text = text("Подробности ошибки", "Error details")
         details.visibility = if (lastError.isNotEmpty()) View.VISIBLE else View.GONE
         style(language, false); style(mode, !audio); style(audioMode, audio)
-        style(analyze, media == null); style(download, true); style(save, true); style(update, false); style(details, false)
+        style(analyze, false); style(download, true); style(save, true); style(update, false); style(details, false)
         if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("✓ Сохранено в ${if (audio) "Music/Flow" else "Movies/Flow"}.", "✓ Saved to ${if (audio) "Music/Flow" else "Movies/Flow"}.") else if (ready != null) text("Готово! Сохраните файл на устройстве.", "Ready! Save the file to your device.") else text("Без сервера · Загрузка работает в фоне\nВ YouTube нажмите «Поделиться» → Flow.", "No server · Downloads work in the background\nIn YouTube, tap Share → Flow.")
         status.setTextColor(if (lastError.isNotEmpty()) Color.rgb(255, 171, 151) else Color.rgb(175, 190, 174))
     }
@@ -421,6 +450,48 @@ class MainActivity : Activity() {
         embedCover.alpha = if (supportsCover) 1f else .45f
         embedMetadata.text = optionCaption(text("Название и исполнитель", "Title and artist"), text("Сведения о треке, если доступны", "Track details, when available"))
         embedMetadata.isEnabled = !busy
+        if (::exportSummary.isInitialized) {
+            val format = if (audio) choice?.label.orEmpty() else if (containerSpinner.selectedItemPosition == 1) "MP4" else "MKV"
+            val quality = if (audio) { if (lossy) "$rate " + text("кбит/с", "kbps") else text("Исходное качество", "Source quality") } else choice?.label.orEmpty()
+            exportSummary.text = "$format · $quality   ›"
+            exportSummary.isEnabled = !busy && choices.isNotEmpty()
+            style(exportSummary, false)
+            advancedToggle.text = text("Дополнительно", "Advanced") + if (advancedFields.visibility == View.VISIBLE) "  −" else "  +"
+            style(advancedToggle, false)
+        }
+    }
+
+    private fun showExportSettings() {
+        if (busy || choices.isEmpty()) return
+        (exportFields.parent as? android.view.ViewGroup)?.removeView(exportFields)
+        val dialog = android.app.Dialog(this)
+        settingsDialog = dialog
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(24))
+            background = surface()
+            addView(TextView(this@MainActivity).apply {
+                text = text("Настройки скачивания", "Download settings"); textSize = 21f
+                setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD); setPadding(0, 0, 0, dp(16))
+            })
+            addView(exportFields)
+            addView(Button(this@MainActivity).apply {
+                text = text("Готово", "Done"); isAllCaps = false; style(this, true)
+                setOnClickListener { dialog.dismiss() }
+            }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(12) })
+        }
+        dialog.setContentView(ScrollView(this).apply { addView(panel) })
+        dialog.setOnDismissListener {
+            (exportFields.parent as? android.view.ViewGroup)?.removeView(exportFields)
+            settingsDialog = null
+        }
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setGravity(android.view.Gravity.BOTTOM)
+            setLayout(-1, -2)
+            attributes = attributes.apply { height = (resources.displayMetrics.heightPixels * .75f).toInt() }
+        }
+        refreshExportOptions()
     }
 
     private fun optionCaption(title: String, subtitle: String): CharSequence = android.text.SpannableString("$title\n$subtitle").apply {
@@ -677,6 +748,7 @@ class MainActivity : Activity() {
         setOnClickListener { action() }
     }
     override fun onDestroy() {
+        settingsDialog?.dismiss()
         super.onDestroy()
         worker.shutdownNow()
         imageWorker.shutdownNow()
