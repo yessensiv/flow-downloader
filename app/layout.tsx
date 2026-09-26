@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { LanguageProvider } from './language';
 import "./globals.css";
 import "./result-readable.css";
 import "./polish.css";
@@ -9,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
-  return <html lang="ru"><body>{children}</body></html>;
+  return <html lang="ru"><body><LanguageProvider>{children}</LanguageProvider></body></html>;
 }
