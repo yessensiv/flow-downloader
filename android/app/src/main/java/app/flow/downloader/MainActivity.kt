@@ -19,6 +19,8 @@ import java.util.concurrent.Executors
 /** First prototype: one job at a time, while the screen is open. */
 class MainActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
+    private val imageWorker = Executors.newSingleThreadExecutor()
+    private lateinit var thumbnail: ImageView
     private lateinit var engine: MediaEngine
     private lateinit var root: LinearLayout
     private lateinit var input: EditText
@@ -103,11 +105,21 @@ class MainActivity : Activity() {
                 val found = engine.analyze(url)
                 runOnUiThread {
                     ready?.parentFile?.deleteRecursively(); ready = null
-                    media = found; title.text = found.title; refreshChoices()
+                    media = found; title.text = found.title; refreshChoices(); loadThumbnail(found)
                 }
             }
         }
         resultLabel = label("", 13).apply { setTextColor(lime); setPadding(0, 0, 0, dp(8)) }
+        thumbnail = object : ImageView(this) {
+            override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                val width = View.MeasureSpec.getSize(widthMeasureSpec)
+                super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(width * 9 / 16, View.MeasureSpec.EXACTLY))
+            }
+        }.apply {
+            scaleType = ImageView.ScaleType.FIT_CENTER
+            background = surface(Color.rgb(15, 20, 16)); clipToOutline = true
+            visibility = View.GONE
+        }
         title = label("", 21).apply { setPadding(0, 0, 0, dp(16)); setTypeface(null, Typeface.BOLD); setLineSpacing(dp(3).toFloat(), 1f) }
         qualityLabel = label("", 14).apply { setTextColor(Color.rgb(175, 190, 174)); setPadding(0, 0, 0, dp(6)) }
         spinner = Spinner(this).apply { background = surface(); minimumHeight = dp(56); setPadding(dp(10), 0, dp(10), 0) }
@@ -129,7 +141,7 @@ class MainActivity : Activity() {
             orientation = LinearLayout.VERTICAL
             background = surface(); setPadding(dp(20), dp(20), dp(20), dp(12))
         }
-        listOf(resultLabel, title, qualityLabel, spinner, download).forEach {
+        listOf(resultLabel, thumbnail, title, qualityLabel, spinner, download).forEach {
             root.removeView(it); resultCard.addView(it, LinearLayout.LayoutParams(-1, if (it == download || it == spinner) dp(54) else -2).apply { bottomMargin = dp(10) })
         }
         root.addView(resultCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22); bottomMargin = dp(14) })
@@ -221,11 +233,53 @@ class MainActivity : Activity() {
                 textSize = 16f; setTextColor(Color.rgb(235, 241, 232))
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 setPadding(dp(14), dp(16), dp(14), dp(16))
-                setBackgroundColor(Color.rgb(28, 36, 29))
+                setBackgroundColor(if (dropdown) Color.rgb(28, 36, 29) else Color.TRANSPARENT)
                 minHeight = dp(52)
             }
             override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, false)
             override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, true)
+        }
+    }
+    private fun loadThumbnail(found: Media) {
+        thumbnail.setImageDrawable(null)
+        thumbnail.visibility = View.GONE
+        thumbnail.contentDescription = found.title
+        imageWorker.execute {
+            // Preview failure must never prevent analyzing or downloading the media.
+            val bitmap = runCatching {
+                val url = java.net.URL(found.thumbnail)
+                require(url.protocol == "https" && (url.host == "i.ytimg.com" || url.host.endsWith(".ytimg.com")))
+                val connection = url.openConnection() as java.net.HttpURLConnection
+                try {
+                    connection.connectTimeout = 8000; connection.readTimeout = 8000
+                    connection.instanceFollowRedirects = false
+                    require(connection.responseCode == 200)
+                    val bytes = connection.inputStream.use { stream ->
+                        val output = java.io.ByteArrayOutputStream()
+                        val buffer = ByteArray(8192)
+                        while (true) {
+                            val count = stream.read(buffer)
+                            if (count < 0) break
+                            require(output.size() + count <= 2 * 1024 * 1024)
+                            output.write(buffer, 0, count)
+                        }
+                        output.toByteArray()
+                    }
+                    val bounds = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
+                    val options = android.graphics.BitmapFactory.Options().apply {
+                        inSampleSize = 1
+                        while (bounds.outWidth / inSampleSize > 1280 || bounds.outHeight / inSampleSize > 1280) inSampleSize *= 2
+                    }
+                    android.graphics.BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                } finally { connection.disconnect() }
+            }.getOrNull()
+            runOnUiThread {
+                if (!isDestroyed && media === found && bitmap != null) {
+                    thumbnail.setImageBitmap(bitmap)
+                    thumbnail.visibility = View.VISIBLE
+                }
+            }
         }
     }
     private fun job(message: String, block: () -> Unit) {
@@ -272,6 +326,7 @@ class MainActivity : Activity() {
     override fun onDestroy() {
         super.onDestroy()
         worker.shutdownNow()
+        imageWorker.shutdownNow()
         Thread { com.yausername.youtubedl_android.YoutubeDL.getInstance().destroyProcessById("flow-download"); com.yausername.youtubedl_android.YoutubeDL.getInstance().destroyProcessById("flow-analyze") }.start()
     }
 }

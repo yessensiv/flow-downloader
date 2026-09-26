@@ -9,7 +9,7 @@ import org.json.JSONObject
 import java.io.File
 
 data class Choice(val selector: String, val label: String, val audio: Boolean, val mp3: Boolean = false)
-data class Media(val url: String, val title: String, val choices: List<Choice>)
+data class Media(val url: String, val title: String, val choices: List<Choice>, val thumbnail: String = "")
 
 class MediaEngine(private val context: Context) {
     private val preferences = context.getSharedPreferences("engine", Context.MODE_PRIVATE)
@@ -76,7 +76,7 @@ class MediaEngine(private val context: Context) {
             choices += Choice(track.getString("format_id"), "MP3 · 192 kbps", true, true)
         }
         require(choices.isNotEmpty()) { "EMPTY" }
-        return Media(url, json.optString("title", "YouTube"), choices)
+        return Media(url, json.optString("title", "YouTube"), choices, json.optString("thumbnail"))
     }
     fun download(media: Media, choice: Choice, progress: (Float) -> Unit): File {
         ensureCurrent()
