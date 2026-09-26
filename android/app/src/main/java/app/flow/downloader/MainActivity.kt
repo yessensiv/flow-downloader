@@ -399,6 +399,8 @@ class MainActivity : Activity() {
             val retained = runCatching {
                 require(permissionFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
                 contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                if (permissionFlags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION != 0)
+                    contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }.isSuccess
             val recorded = runCatching {
                 DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), savedTitle, savedMime, file.length(), System.currentTimeMillis()))

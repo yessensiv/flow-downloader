@@ -19,6 +19,9 @@ class DownloadsActivity : Activity() {
     private lateinit var list: LinearLayout
     private lateinit var history: DownloadHistory
     private var english = false
+    private var music = false
+    private var deleting = false
+    private var pendingDeletion: SavedDownload? = null
     private val worker = Executors.newSingleThreadExecutor()
     private fun text(ru: String, en: String) = if (english) en else ru
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
@@ -27,6 +30,8 @@ class DownloadsActivity : Activity() {
         super.onCreate(savedInstanceState)
         english = intent.getBooleanExtra("english", false)
         history = DownloadHistory(this)
+        music = savedInstanceState?.getBoolean("music") ?: false
+        pendingDeletion = savedInstanceState?.getString("pendingDeletion")?.let { uri -> history.list().find { it.uri == uri } }
         val scroll = ScrollView(this).apply { setBackgroundColor(Color.rgb(15, 20, 16)); isFillViewport = true }
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(24)) }
         scroll.addView(list); setContentView(scroll)
@@ -51,11 +56,26 @@ class DownloadsActivity : Activity() {
         list.removeAllViews()
         list.addView(action(text("‹  Назад", "‹  Back")) { finish() }, LinearLayout.LayoutParams(dp(110), dp(48)))
         list.addView(label(text("Мои загрузки", "My downloads"), 28))
-        list.addView(label(text("Файлы, которые вы сохранили из Flow. Удаление записи не удаляет сам файл.",
-            "Files you saved from Flow. Removing an entry does not delete the file."), 15, true))
-        val items = history.list()
-        if (items.isEmpty()) list.addView(label(text("Здесь пока пусто\nСкачайте файл и нажмите «Сохранить файл» — он появится здесь.",
-            "Nothing here yet\nDownload and save a file to see it here."), 17, true))
+        list.addView(label(text("Видео и музыка — каждый файл на своём месте.",
+            "Your saved videos and music, neatly separated."), 15, true))
+        val all = history.list()
+        val tabs = LinearLayout(this)
+        listOf(false, true).forEach { audio ->
+            val count = all.count { it.isAudio == audio }
+            val name = if (audio) text("Музыка", "Music") else text("Видео", "Video")
+            tabs.addView(action("$name · $count") { music = audio; render() }.apply {
+                if (music == audio) {
+                    setTextColor(Color.rgb(15, 20, 16))
+                    background = GradientDrawable().apply { setColor(lime); cornerRadius = dp(12).toFloat() }
+                }
+                isEnabled = !deleting
+            }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { if (audio) leftMargin = dp(8) })
+        }
+        list.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
+        val items = all.filter { it.isAudio == music }
+        if (items.isEmpty()) list.addView(label(if (music) text("Музыки пока нет\nСохраните аудио из Flow — оно появится здесь.",
+            "No music yet\nSave audio from Flow to see it here.") else text("Видео пока нет\nСохраните видео из Flow — оно появится здесь.",
+            "No videos yet\nSave a video from Flow to see it here."), 17, true))
         items.forEach { item ->
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(12))
@@ -67,7 +87,17 @@ class DownloadsActivity : Activity() {
             actions.addView(action(text("Открыть", "Open")) { access(item, false) }, LinearLayout.LayoutParams(0, dp(48), 1f))
             actions.addView(action(text("Поделиться", "Share")) { access(item, true) }, LinearLayout.LayoutParams(0, dp(48), 1f))
             actions.addView(action("⋮") {
-                AlertDialog.Builder(this).setTitle(text("Убрать из истории?", "Remove from history?"))
+                AlertDialog.Builder(this).setTitle(item.title)
+                    .setItems(arrayOf(text("Удалить файл и запись", "Delete file and entry"), text("Только убрать из истории", "Remove entry only"))) { _, which ->
+                        if (which == 0) confirmDelete(item) else removeEntry(item)
+                    }.show()
+            }.apply { contentDescription = text("Действия с файлом", "File actions"); isEnabled = !deleting }, LinearLayout.LayoutParams(dp(48), dp(48)))
+            card.addView(actions)
+            list.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+        }
+    }
+    private fun removeEntry(item: SavedDownload) {
+        AlertDialog.Builder(this).setTitle(text("Убрать из истории?", "Remove from history?"))
                     .setMessage(text("Файл останется в выбранной папке.", "The file stays in its folder."))
                     .setPositiveButton(text("Убрать", "Remove")) { _, _ ->
                         worker.execute {
@@ -75,10 +105,81 @@ class DownloadsActivity : Activity() {
                             runOnUiThread { if (!isDestroyed) { if (result.isSuccess) render() else unavailable() } }
                         }
                     }.setNegativeButton(text("Отмена", "Cancel"), null).show()
-            }.apply { contentDescription = text("Убрать из истории", "Remove from history") }, LinearLayout.LayoutParams(dp(48), dp(48)))
-            card.addView(actions)
-            list.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+    }
+    private fun confirmDelete(item: SavedDownload) {
+        if (deleting) return
+        AlertDialog.Builder(this).setTitle(text("Удалить файл?", "Delete file?"))
+            .setMessage(item.title + "\n\n" + text("Файл будет удалён из выбранной папки и из Flow. Отменить удаление в приложении нельзя.",
+                "The file will be deleted from its folder and from Flow. This cannot be undone in the app."))
+            .setNegativeButton(text("Отмена", "Cancel"), null)
+            .setPositiveButton(text("Удалить файл", "Delete file")) { _, _ -> deleteFile(item) }.show()
+    }
+    private fun deleteFile(item: SavedDownload) {
+        if (deleting) return
+        deleting = true; render()
+        worker.execute {
+            var fileDeleted = false
+            val result = runCatching {
+                history.deleteFile(item) { value ->
+                    val uri = Uri.parse(value)
+                    if (checkUriPermission(uri, android.os.Process.myPid(), android.os.Process.myUid(), Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                        throw SecurityException("Write permission required")
+                    require(android.provider.DocumentsContract.isDocumentUri(this, uri))
+                    val supports = contentResolver.query(uri, arrayOf(android.provider.DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use {
+                        it.moveToFirst() && it.getInt(0) and android.provider.DocumentsContract.Document.FLAG_SUPPORTS_DELETE != 0
+                    } ?: false
+                    if (!supports) false else android.provider.DocumentsContract.deleteDocument(contentResolver, uri).also { fileDeleted = it }
+                }
+            }
+            runOnUiThread {
+                if (isDestroyed) return@runOnUiThread
+                deleting = false; render()
+                when {
+                    result.getOrDefault(false) -> Toast.makeText(this, text("Файл и запись удалены.", "File and entry deleted."), Toast.LENGTH_LONG).show()
+                    fileDeleted -> AlertDialog.Builder(this).setMessage(text("Файл удалён, но запись не удалось обновить. Уберите её из истории вручную.", "File deleted, but history could not be updated. Remove the entry manually.")).setPositiveButton("OK", null).show()
+                    result.exceptionOrNull() is SecurityException -> requestDeleteAccess(item)
+                    else -> AlertDialog.Builder(this).setMessage(text("Не удалось удалить файл. Возможно, он уже удалён или хранилище не поддерживает удаление. Запись оставлена в истории.",
+                        "Could not delete the file. It may be missing or the provider does not support deletion. The history entry was kept.")).setPositiveButton("OK", null).show()
+                }
+            }
         }
+    }
+    private fun requestDeleteAccess(item: SavedDownload) {
+        AlertDialog.Builder(this).setTitle(text("Нужен доступ к файлу", "File access needed"))
+            .setMessage(text("Выберите этот же файл в системном окне, чтобы разрешить удаление. После выбора снова появится подтверждение.",
+                "Select this same file in the system picker to allow deletion. You will be asked to confirm again."))
+            .setNegativeButton(text("Отмена", "Cancel"), null)
+            .setPositiveButton(text("Выбрать файл", "Select file")) { _, _ ->
+                pendingDeletion = item
+                startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                    putExtra(android.provider.DocumentsContract.EXTRA_INITIAL_URI, Uri.parse(item.uri))
+                }, 30)
+            }.show()
+    }
+    @Deprecated("Uses system document picker")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode != 30) return
+        val item = pendingDeletion ?: return
+        pendingDeletion = null
+        if (resultCode != RESULT_OK) return
+        val uri = data?.data ?: return
+        if (uri != Uri.parse(item.uri)) {
+            Toast.makeText(this, text("Выбран другой файл. Ничего не удалено.", "A different file was selected. Nothing deleted."), Toast.LENGTH_LONG).show()
+            return
+        }
+        if (data.flags and Intent.FLAG_GRANT_WRITE_URI_PERMISSION == 0) {
+            Toast.makeText(this, text("Хранилище не предоставило доступ на удаление.", "The provider did not grant write access."), Toast.LENGTH_LONG).show()
+            return
+        }
+        runCatching { contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION) }
+        confirmDelete(item)
+    }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean("music", music); outState.putString("pendingDeletion", pendingDeletion?.uri)
+        super.onSaveInstanceState(outState)
     }
     private fun access(item: SavedDownload, share: Boolean) {
         worker.execute {
