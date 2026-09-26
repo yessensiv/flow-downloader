@@ -8,7 +8,7 @@ import com.yausername.ffmpeg.FFmpeg
 import org.json.JSONObject
 import java.io.File
 
-data class Choice(val selector: String, val label: String, val audio: Boolean, val mp3: Boolean = false)
+data class Choice(val selector: String, val label: String, val audio: Boolean, val mp3: Boolean = false, val extractAudio: Boolean = false)
 data class Media(val url: String, val title: String, val choices: List<Choice>, val thumbnail: String = "")
 
 class MediaEngine(private val context: Context) {
@@ -59,21 +59,25 @@ class MediaEngine(private val context: Context) {
         val formats = json.getJSONArray("formats")
         val rows = (0 until formats.length()).map { formats.getJSONObject(it) }
             .filter { !it.optBoolean("has_drm") && it.optString("url").startsWith("https://") }
-        val audio = rows.filter { it.optString("vcodec") == "none" && it.optString("acodec", "none") != "none" }
+        val audioOnly = rows.filter { it.optString("vcodec") == "none" && it.optString("acodec", "none") != "none" }
+        val embeddedAudio = rows.filter { it.optString("acodec", "none") != "none" }
+        val audioSources = audioOnly.ifEmpty { embeddedAudio }
+        val extractAudio = audioOnly.isEmpty()
         val choices = rows.filter { it.optInt("height") in 144..2160 && it.optString("vcodec", "none") != "none" }
             .sortedWith(compareByDescending<JSONObject> { it.optInt("height") }.thenByDescending { it.optDouble("fps", 0.0) }
                 .thenBy { if (it.optString("protocol") == "https") 0 else 1 })
             .distinctBy { "${it.optInt("height")}:${it.optDouble("fps", 0.0)}" }
             .mapNotNull { row ->
-                val track = audio.maxByOrNull { it.optDouble("abr", 0.0) }
+                val track = audioOnly.maxByOrNull { it.optDouble("abr", it.optDouble("tbr", 0.0)) }
                 val separate = row.optString("acodec", "none") == "none"
                 if (separate && track == null) null else Choice(
                     row.getString("format_id") + if (separate) "+${track!!.getString("format_id")}" else "",
                     "${row.optInt("height")}p · ${row.optDouble("fps", 0.0).toInt()} fps", false)
             }.toMutableList()
-        audio.maxByOrNull { it.optDouble("abr", 0.0) }?.let { track ->
-            choices += Choice(track.getString("format_id"), track.optString("ext").uppercase(), true)
-            choices += Choice(track.getString("format_id"), "MP3 · 192 kbps", true, true)
+        audioSources.maxByOrNull { it.optDouble("abr", it.optDouble("tbr", 0.0)) }?.let { track ->
+            val audioLabel = if (extractAudio) "M4A · только звук" else track.optString("ext").uppercase()
+            choices += Choice(track.getString("format_id"), audioLabel, true, extractAudio = extractAudio)
+            choices += Choice(track.getString("format_id"), "MP3 · 192 kbps", true, mp3 = true, extractAudio = extractAudio)
         }
         require(choices.isNotEmpty()) { "EMPTY" }
         return Media(url, json.optString("title", "YouTube"), choices, json.optString("thumbnail"))
@@ -100,6 +104,7 @@ class MediaEngine(private val context: Context) {
                 addOption("--max-filesize", "2G")
                 if (!choice.audio) addOption("--merge-output-format", "mkv")
                 if (choice.mp3) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
+                else if (choice.extractAudio) { addOption("-x"); addOption("--audio-format", "m4a"); addOption("--audio-quality", "0") }
             }
             YoutubeDL.getInstance().execute(req, "flow-download") { value, eta, line -> progress(value, eta, line) }
             return dir.listFiles()?.singleOrNull { it.isFile && it.extension in listOf("mp4", "mkv", "webm", "m4a", "mp3", "opus") }

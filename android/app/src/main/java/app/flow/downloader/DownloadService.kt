@@ -37,7 +37,8 @@ class DownloadService : Service() {
         val url = intent?.getStringExtra("url") ?: run { stopSelf(); return START_NOT_STICKY }
         english = intent.getBooleanExtra("english", false)
         val choice = Choice(intent.getStringExtra("selector") ?: "", intent.getStringExtra("label") ?: "",
-            intent.getBooleanExtra("audio", false), intent.getBooleanExtra("mp3", false))
+            intent.getBooleanExtra("audio", false), intent.getBooleanExtra("mp3", false),
+            intent.getBooleanExtra("extractAudio", false))
         val media = Media(url, intent.getStringExtra("title") ?: "YouTube", listOf(choice), intent.getStringExtra("thumbnail") ?: "")
         state = State(System.nanoTime(), media, choice)
         getSystemService(NotificationManager::class.java).createNotificationChannel(

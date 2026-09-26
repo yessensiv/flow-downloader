@@ -168,7 +168,8 @@ class MainActivity : Activity() {
                     startForegroundService(Intent(this, DownloadService::class.java).apply {
                         putExtra("url", found.url); putExtra("title", found.title); putExtra("thumbnail", found.thumbnail)
                         putExtra("selector", selected.selector); putExtra("label", selected.label)
-                        putExtra("audio", selected.audio); putExtra("mp3", selected.mp3); putExtra("english", english)
+                        putExtra("audio", selected.audio); putExtra("mp3", selected.mp3)
+                        putExtra("extractAudio", selected.extractAudio); putExtra("english", english)
                     })
                     followingDownload = true; busy = true; saved = false; lastError = ""
                     refresh(); status.text = text("Готовим файл. Можно свернуть приложение.", "Preparing file. You can leave the app.")
@@ -293,7 +294,7 @@ class MainActivity : Activity() {
         historyButton.text = text("Мои загрузки", "My downloads")
         style(historyButton, false)
         listOf(mode, audioMode, input, analyze, update).forEach { it.isEnabled = !busy }
-        spinner.isEnabled = !busy
+        spinner.isEnabled = !busy && choices.isNotEmpty()
         download.isEnabled = !busy && choices.isNotEmpty()
         save.visibility = if (ready != null && !busy) View.VISIBLE else View.GONE
         save.isEnabled = !busy && !saved
@@ -324,10 +325,16 @@ class MainActivity : Activity() {
     }
     private fun refreshChoices() {
         choices = media?.choices?.filter { it.audio == audio } ?: emptyList()
-        spinner.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, choices.map { it.label }) {
+        val labels = choices.map { choice ->
+            if (choice.extractAudio && !choice.mp3) text("M4A · только звук", "M4A · audio only") else choice.label
+        }.ifEmpty {
+            listOf(if (audio) text("Аудио для этого видео недоступно", "Audio is unavailable for this video")
+                else text("Нет доступных форматов", "No formats available"))
+        }
+        spinner.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, labels) {
             private fun row(position: Int, dropdown: Boolean) = TextView(this@MainActivity).apply {
                 text = getItem(position) + if (dropdown) "" else "   ▾"
-                textSize = 16f; setTextColor(Color.rgb(235, 241, 232))
+                textSize = 16f; setTextColor(if (choices.isEmpty()) Color.rgb(144, 159, 144) else Color.rgb(235, 241, 232))
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 setPadding(dp(14), dp(16), dp(14), dp(16))
                 setBackgroundColor(if (dropdown) Color.rgb(28, 36, 29) else Color.TRANSPARENT)
