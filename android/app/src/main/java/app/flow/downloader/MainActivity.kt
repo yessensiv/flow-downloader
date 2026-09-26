@@ -63,7 +63,10 @@ class MainActivity : Activity() {
             val url = input.text.toString()
             job(text("Ищем варианты…", "Finding options…")) {
                 val found = engine.analyze(url)
-                runOnUiThread { media = found; title.text = found.title; refreshChoices() }
+                runOnUiThread {
+                    ready?.parentFile?.deleteRecursively(); ready = null
+                    media = found; title.text = found.title; refreshChoices()
+                }
             }
         }
         title = label("", 24)
