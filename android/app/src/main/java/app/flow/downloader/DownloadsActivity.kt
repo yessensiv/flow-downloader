@@ -41,8 +41,8 @@ class DownloadsActivity : Activity() {
     private val lime = Color.rgb(194, 255, 112)
     private fun animateRows() {
         if (!ValueAnimator.areAnimatorsEnabled()) return
-        (0 until list.childCount).forEach { index ->
-            val child = list.getChildAt(index)
+        (0 until results.childCount).forEach { index ->
+            val child = results.getChildAt(index)
             child.alpha = 0f; child.translationY = dp(6).toFloat()
             child.animate().alpha(1f).translationY(0f).setStartDelay(index * 28L).setDuration(200L)
                 .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
@@ -147,38 +147,55 @@ class DownloadsActivity : Activity() {
             "No music yet\nSave audio from Flow to see it here.") else text("Видео пока нет\nСохраните видео из Flow — оно появится здесь.",
             "No videos yet\nSave a video from Flow to see it here."), 17, true))
         items.forEach { item ->
-            val card = LinearLayout(this).apply {
-                orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(12))
-                background = GradientDrawable().apply { setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(16).toFloat() }
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(dp(10), dp(9), dp(4), dp(9))
+                val shape = GradientDrawable().apply { setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(15).toFloat() }
+                background = RippleDrawable(ColorStateList.valueOf(Color.argb(36, 194, 255, 112)), shape, null)
+                isClickable = true; isFocusable = true
+                setOnClickListener { access(item, false) }
             }
-            val thumbnail = object : ImageView(this) {
-                override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-                    val width = View.MeasureSpec.getSize(widthMeasureSpec)
-                    super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(width * 9 / 16, View.MeasureSpec.EXACTLY))
-                }
-            }.apply {
+            val thumbnail = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
                 background = GradientDrawable().apply { setColor(Color.rgb(20, 27, 21)); cornerRadius = dp(10).toFloat() }
                 clipToOutline = true
-                visibility = if (item.thumbnail.isBlank()) View.GONE else View.VISIBLE
+                contentDescription = item.title
             }
-            if (item.thumbnail.isNotBlank()) {
-                card.addView(thumbnail, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
-                loadThumbnail(item.thumbnail, thumbnail)
+            if (item.thumbnail.isNotBlank()) loadThumbnail(item.thumbnail, thumbnail)
+            else thumbnail.setImageResource(if (item.isAudio) android.R.drawable.ic_media_play else android.R.drawable.ic_menu_slideshow)
+            row.addView(thumbnail, LinearLayout.LayoutParams(dp(104), dp(60)).apply { rightMargin = dp(11) })
+
+            val details = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL; gravity = android.view.Gravity.CENTER_VERTICAL
             }
-            card.addView(label(item.title, 20))
-            card.addView(label("${android.text.format.Formatter.formatShortFileSize(this, item.bytes)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.savedAt))}", 13, true))
-            val actions = LinearLayout(this)
-            actions.addView(cardAction(text("↗  Открыть", "↗  Open")) { access(item, false) }, LinearLayout.LayoutParams(0, dp(48), 1f))
-            actions.addView(cardAction(text("↗  Поделиться", "↗  Share")) { access(item, true) }, LinearLayout.LayoutParams(0, dp(48), 1f))
-            actions.addView(cardAction("⋮", text("Действия с файлом", "File actions")) {
+            details.addView(label(item.title, 15).apply {
+                maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(0, 0, 0, dp(3)); setLineSpacing(dp(1).toFloat(), 1f)
+            })
+            val metadata = "${android.text.format.Formatter.formatShortFileSize(this, item.bytes)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.savedAt))}"
+            details.addView(label(metadata, 12, true).apply {
+                maxLines = 1; ellipsize = android.text.TextUtils.TruncateAt.END
+                setPadding(0, 0, 0, 0)
+            })
+            row.addView(details, LinearLayout.LayoutParams(0, dp(60), 1f))
+            row.addView(cardAction("⋮", text("Действия с файлом", "File actions")) {
                 AlertDialog.Builder(this).setTitle(item.title)
-                    .setItems(arrayOf(text("Удалить файл с устройства…", "Delete file from device…"), text("Убрать только запись (файл останется)", "Remove history only (keep file)"))) { _, which ->
-                        if (which == 0) confirmDelete(item) else removeEntry(item)
+                    .setItems(arrayOf(
+                        text("Открыть", "Open"),
+                        text("Поделиться", "Share"),
+                        text("Удалить файл с устройства…", "Delete file from device…"),
+                        text("Убрать только запись (файл останется)", "Remove history only (keep file)")
+                    )) { _, which ->
+                        when (which) {
+                            0 -> access(item, false)
+                            1 -> access(item, true)
+                            2 -> confirmDelete(item)
+                            3 -> removeEntry(item)
+                        }
                     }.show()
-            }.apply { isEnabled = !deleting; alpha = if (deleting) .45f else 1f }, LinearLayout.LayoutParams(dp(48), dp(48)))
-            card.addView(actions)
-            results.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+            }.apply { isEnabled = !deleting; alpha = if (deleting) .45f else 1f },
+                LinearLayout.LayoutParams(dp(44), dp(48)))
+            results.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
         }
         animateRows()
     }
