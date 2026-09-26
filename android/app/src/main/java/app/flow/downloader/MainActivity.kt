@@ -37,6 +37,7 @@ class MainActivity : Activity() {
     private lateinit var historyButton: Button
     private var exportTitle = "Flow"
     private var exportMime = "application/octet-stream"
+    private var exportThumbnail = ""
     private lateinit var mode: Button
     private lateinit var audioMode: Button
     private lateinit var subtitle: TextView
@@ -175,6 +176,7 @@ class MainActivity : Activity() {
             val mime = when (file.extension) { "mp3" -> "audio/mpeg"; "m4a" -> "audio/mp4"; "mkv" -> "video/x-matroska"; "mp4" -> "video/mp4"; "webm" -> if (audio) "audio/webm" else "video/webm"; else -> "application/octet-stream" }
             exportTitle = media?.title ?: "Flow"
             exportMime = mime
+            exportThumbnail = media?.thumbnail.orEmpty()
             if (android.os.Build.VERSION.SDK_INT >= 29) {
                 saveToMediaStore(file, exportTitle, mime)
                 return@button
@@ -403,7 +405,7 @@ class MainActivity : Activity() {
                 check(contentResolver.update(uri!!, android.content.ContentValues().apply {
                     put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
                 }, null, null) == 1) { "Could not finish media file" }
-                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), safeTitle, mime, file.length(), System.currentTimeMillis()))
+                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), safeTitle, mime, file.length(), System.currentTimeMillis(), exportThumbnail))
                 runOnUiThread { if (!isDestroyed) saved = true }
             } catch (e: Exception) {
                 uri?.let { runCatching { contentResolver.delete(it, null, null) } }
@@ -459,6 +461,7 @@ class MainActivity : Activity() {
         val file = ready ?: return
         val savedTitle = exportTitle
         val savedMime = exportMime
+        val savedThumbnail = exportThumbnail
         val permissionFlags = (data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION))
         job(text("Сохраняем…", "Saving…")) {
             contentResolver.openOutputStream(uri)?.use { output -> file.inputStream().use { it.copyTo(output) } } ?: error("Cannot open destination")
@@ -470,7 +473,7 @@ class MainActivity : Activity() {
                     contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }.isSuccess
             val recorded = runCatching {
-                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), savedTitle, savedMime, file.length(), System.currentTimeMillis()))
+                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), savedTitle, savedMime, file.length(), System.currentTimeMillis(), savedThumbnail))
             }.isSuccess
             runOnUiThread {
                 saved = true

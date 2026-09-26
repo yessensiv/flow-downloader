@@ -6,24 +6,34 @@ import android.animation.ValueAnimator
 import android.content.ClipData
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.BitmapFactory
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.text.Editable
+import android.text.TextWatcher
 import android.view.View
 import android.widget.*
+import java.net.HttpURLConnection
+import java.net.URL
 import java.text.DateFormat
 import java.util.Date
 import java.util.concurrent.Executors
 
 class DownloadsActivity : Activity() {
     private lateinit var list: LinearLayout
+    private lateinit var results: LinearLayout
+    private lateinit var tabs: LinearLayout
+    private lateinit var search: EditText
     private lateinit var history: DownloadHistory
     private var english = false
     private var music = false
+    private var query = ""
     private var deleting = false
     private var pendingDeletion: SavedDownload? = null
     private val worker = Executors.newSingleThreadExecutor()
+    private val imageWorker = Executors.newSingleThreadExecutor()
     private fun text(ru: String, en: String) = if (english) en else ru
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private val lime = Color.rgb(194, 255, 112)
@@ -50,6 +60,15 @@ class DownloadsActivity : Activity() {
             insets
         }
         scroll.requestApplyInsets()
+        buildHeader()
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                query = s?.toString().orEmpty()
+                renderItems()
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
         render()
     }
     private fun label(value: String, size: Int, muted: Boolean = false) = TextView(this).apply {
@@ -70,14 +89,27 @@ class DownloadsActivity : Activity() {
         }
         setOnClickListener { click() }
     }
-    private fun render() {
-        list.removeAllViews()
+    private fun buildHeader() {
         list.addView(action(text("‹  Назад", "‹  Back")) { finish() }, LinearLayout.LayoutParams(dp(110), dp(48)))
         list.addView(label(text("Мои загрузки", "My downloads"), 28))
         list.addView(label(text("Видео и музыка — каждый файл на своём месте.",
             "Your saved videos and music, neatly separated."), 15, true))
+        search = EditText(this).apply {
+            textSize = 16f; setSingleLine(); setTextColor(Color.WHITE)
+            setHintTextColor(Color.rgb(144, 159, 144)); hint = text("Поиск по названию", "Search by title")
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT
+            background = GradientDrawable().apply { setColor(Color.rgb(20, 27, 21)); cornerRadius = dp(14).toFloat(); setStroke(dp(1), Color.rgb(54, 67, 54)) }
+            setPadding(dp(16), dp(12), dp(16), dp(12)); minimumHeight = dp(54)
+        }
+        list.addView(search, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(4) })
+        tabs = LinearLayout(this)
+        list.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
+        results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        list.addView(results)
+    }
+    private fun render() {
         val all = history.list()
-        val tabs = LinearLayout(this)
+        tabs.removeAllViews()
         listOf(false, true).forEach { audio ->
             val count = all.count { it.isAudio == audio }
             val name = if (audio) text("Музыка", "Music") else text("Видео", "Video")
@@ -89,15 +121,33 @@ class DownloadsActivity : Activity() {
                 isEnabled = !deleting
             }, LinearLayout.LayoutParams(0, dp(50), 1f).apply { if (audio) leftMargin = dp(8) })
         }
-        list.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
-        val items = all.filter { it.isAudio == music }
-        if (items.isEmpty()) list.addView(label(if (music) text("Музыки пока нет\nСохраните аудио из Flow — оно появится здесь.",
+        renderItems()
+    }
+    private fun renderItems() {
+        results.removeAllViews()
+        val items = history.list().filter { it.isAudio == music && it.title.contains(query.trim(), ignoreCase = true) }
+        if (items.isEmpty()) results.addView(label(if (query.isNotBlank()) text("Ничего не найдено. Попробуйте другое название.", "No matches. Try another title.") else if (music) text("Музыки пока нет\nСохраните аудио из Flow — оно появится здесь.",
             "No music yet\nSave audio from Flow to see it here.") else text("Видео пока нет\nСохраните видео из Flow — оно появится здесь.",
             "No videos yet\nSave a video from Flow to see it here."), 17, true))
         items.forEach { item ->
             val card = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(12), dp(16), dp(12))
                 background = GradientDrawable().apply { setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(16).toFloat() }
+            }
+            val thumbnail = object : ImageView(this) {
+                override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
+                    val width = View.MeasureSpec.getSize(widthMeasureSpec)
+                    super.onMeasure(widthMeasureSpec, View.MeasureSpec.makeMeasureSpec(width * 9 / 16, View.MeasureSpec.EXACTLY))
+                }
+            }.apply {
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                background = GradientDrawable().apply { setColor(Color.rgb(20, 27, 21)); cornerRadius = dp(10).toFloat() }
+                clipToOutline = true
+                visibility = if (item.thumbnail.isBlank()) View.GONE else View.VISIBLE
+            }
+            if (item.thumbnail.isNotBlank()) {
+                card.addView(thumbnail, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+                loadThumbnail(item.thumbnail, thumbnail)
             }
             card.addView(label(item.title, 20))
             card.addView(label("${android.text.format.Formatter.formatShortFileSize(this, item.bytes)} · ${DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT).format(Date(item.savedAt))}", 13, true))
@@ -111,9 +161,33 @@ class DownloadsActivity : Activity() {
                     }.show()
             }.apply { contentDescription = text("Действия с файлом", "File actions"); isEnabled = !deleting }, LinearLayout.LayoutParams(dp(48), dp(48)))
             card.addView(actions)
-            list.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
+            results.addView(card, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(14) })
         }
         animateRows()
+    }
+    private fun loadThumbnail(rawUrl: String, target: ImageView) {
+        imageWorker.execute {
+            val bitmap = runCatching {
+                val url = URL(rawUrl)
+                require(url.protocol == "https" && (url.host == "i.ytimg.com" || url.host.endsWith(".ytimg.com")))
+                val connection = url.openConnection() as HttpURLConnection
+                connection.connectTimeout = 8000; connection.readTimeout = 8000; connection.instanceFollowRedirects = false
+                connection.connect()
+                try {
+                    require(connection.responseCode in 200..299)
+                    val data = connection.inputStream.use { stream ->
+                        val out = java.io.ByteArrayOutputStream(); val buffer = ByteArray(8192); var total = 0
+                        while (true) { val count = stream.read(buffer); if (count < 0) break; total += count; require(total <= 2 * 1024 * 1024); out.write(buffer, 0, count) }
+                        out.toByteArray()
+                    }
+                    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+                    BitmapFactory.decodeByteArray(data, 0, data.size, bounds)
+                    val sample = generateSequence(1) { it * 2 }.takeWhile { bounds.outWidth / it > 960 || bounds.outHeight / it > 540 }.lastOrNull() ?: 1
+                    BitmapFactory.decodeByteArray(data, 0, data.size, BitmapFactory.Options().apply { inSampleSize = sample })
+                } finally { connection.disconnect() }
+            }.getOrNull()
+            if (bitmap != null) runOnUiThread { if (!isDestroyed && target.parent != null) target.setImageBitmap(bitmap) }
+        }
     }
     private fun removeEntry(item: SavedDownload) {
         AlertDialog.Builder(this).setTitle(text("Убрать из истории?", "Remove from history?"))
@@ -259,5 +333,5 @@ class DownloadsActivity : Activity() {
         Toast.makeText(this, text("Файл недоступен: он мог быть удалён, перемещён или доступ отозван.",
             "File unavailable: it may have been moved, deleted, or access revoked."), Toast.LENGTH_LONG).show()
     }
-    override fun onDestroy() { worker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { worker.shutdownNow(); imageWorker.shutdownNow(); super.onDestroy() }
 }

@@ -4,7 +4,7 @@ import android.content.Context
 import org.json.JSONArray
 import org.json.JSONObject
 
-data class SavedDownload(val uri: String, val title: String, val mime: String, val bytes: Long, val savedAt: Long) {
+data class SavedDownload(val uri: String, val title: String, val mime: String, val bytes: Long, val savedAt: Long, val thumbnail: String = "") {
     val isAudio: Boolean get() = mime.startsWith("audio/", ignoreCase = true)
 }
 
@@ -17,7 +17,7 @@ class DownloadHistory(context: Context, storeName: String = "saved_downloads") {
             runCatching {
                 val item = array.getJSONObject(index)
                 SavedDownload(item.getString("uri"), item.getString("title"), item.getString("mime"),
-                    item.getLong("bytes"), item.getLong("savedAt"))
+                    item.getLong("bytes"), item.getLong("savedAt"), item.optString("thumbnail", ""))
             }.getOrNull()
         }
     }.getOrDefault(emptyList())
@@ -35,6 +35,7 @@ class DownloadHistory(context: Context, storeName: String = "saved_downloads") {
         items.forEach { item -> array.put(JSONObject().apply {
             put("uri", item.uri); put("title", item.title); put("mime", item.mime)
             put("bytes", item.bytes); put("savedAt", item.savedAt)
+            put("thumbnail", item.thumbnail)
         }) }
         check(preferences.edit().putString("items", array.toString()).commit()) { "Cannot save download history" }
     }
