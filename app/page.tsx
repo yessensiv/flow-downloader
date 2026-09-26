@@ -16,6 +16,8 @@ const faq = [
 ];
 
 export default function Home() {
+  const [lang, setLang] = useState<"ru" | "en">("ru");
+  const en = lang === "en";
   const [url, setUrl] = useState("");
   const [mode, setMode] = useState<"video" | "audio">("video");
   const [format, setFormat] = useState("MP4");
@@ -67,29 +69,30 @@ export default function Home() {
         <nav className={menu ? "nav open" : "nav"} aria-label="Основная навигация">
           <a href="#downloader" onClick={() => setMenu(false)}>Загрузить</a><a href="#how" onClick={() => setMenu(false)}>Как это работает</a><a href="#faq" onClick={() => setMenu(false)}>Вопросы и ответы</a>
         </nav>
-        <span className="header-label"><span/> Видео и музыка — просто</span>
+        <span className="header-label"><span/> {en ? "Video and music — made simple" : "Видео и музыка — просто"}</span>
+        <div className="language-switch" role="group" aria-label="Language"><button className={lang === "ru" ? "active" : ""} onClick={() => setLang("ru")}>RU</button><button className={lang === "en" ? "active" : ""} onClick={() => setLang("en")}>EN</button></div>
         <button className="mobile-menu icon-button" onClick={() => setMenu(!menu)} aria-label="Открыть меню" aria-expanded={menu}>{menu ? <X/> : <Menu/>}</button>
       </header>
 
       <main>
         <section className="hero" id="downloader">
-          <div className="eyebrow"><span className="status-dot"/> МЕНЬШЕ ДЕЙСТВИЙ. БОЛЬШЕ КОНТЕНТА.</div>
-          <h1>Твои видео.<br/>Твоя музыка. <span>Твой ритм.</span></h1>
-          <p className="hero-description">Сохраняй любимое с YouTube в нужном формате.<br/>От музыки в наушниках до видео в 4K на большом экране.</p>
+          <div className="eyebrow"><span className="status-dot"/> {en ? "LESS FRICTION. MORE CONTENT." : "МЕНЬШЕ ДЕЙСТВИЙ. БОЛЬШЕ КОНТЕНТА."}</div>
+          <h1>{en ? <>Your videos.<br/>Your music. <span>Your rhythm.</span></> : <>Твои видео.<br/>Твоя музыка. <span>Твой ритм.</span></>}</h1>
+          <p className="hero-description">{en ? <>Save your favorite YouTube content in the format you need.<br/>From music in your headphones to 4K video on the big screen.</> : <>Сохраняй любимое с YouTube в нужном формате.<br/>От музыки в наушниках до видео в 4K на большом экране.</>}</p>
 
           <div className="download-card">
             <div className="card-top"><div className="tabs" data-mode={mode} role="tablist" aria-label="Тип загрузки">
-              <button role="tab" aria-selected={mode === "video"} className={mode === "video" ? "active" : ""} onClick={() => changeMode("video")}><Video size={17}/> Видео</button>
-              <button role="tab" aria-selected={mode === "audio"} className={mode === "audio" ? "active" : ""} onClick={() => changeMode("audio")}><Music2 size={17}/> Аудио</button>
+              <button role="tab" aria-selected={mode === "video"} className={mode === "video" ? "active" : ""} onClick={() => changeMode("video")}><Video size={17}/> {en ? "Video" : "Видео"}</button>
+              <button role="tab" aria-selected={mode === "audio"} className={mode === "audio" ? "active" : ""} onClick={() => changeMode("audio")}><Music2 size={17}/> {en ? "Audio" : "Аудио"}</button>
             </div><span className="supported">YouTube <span>+ YouTube Music</span></span></div>
             <form onSubmit={analyze} noValidate autoComplete="off">
-              <label className="input-label" htmlFor="video-url">Ссылка на {mode === 'video' ? 'видео' : 'трек'} YouTube</label>
-              <div className={`url-row ${parseYouTubeUrl(url) && !urlFocused ? 'url-row-filled' : ''}`}><div className={`url-field ${error ? "invalid" : ""} ${parseYouTubeUrl(url) && !urlFocused ? "url-filled" : ""}`}><Link2 size={20}/>{parseYouTubeUrl(url) && !urlFocused ? <button type="button" className="url-summary" onClick={() => setUrlFocused(true)} aria-label="Изменить ссылку" title="Нажмите, чтобы изменить ссылку"><span>{url.includes('youtu.be') ? 'youtu.be' : url.includes('music.youtube.com') ? 'YouTube Music' : 'youtube.com'}</span><span className="url-summary-state"><Check size={14}/> Ссылка добавлена</span></button> : <input ref={urlInput} id="video-url" name="youtube-video-url" type="text" inputMode="url" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} value={url} onFocus={() => setUrlFocused(true)} onBlur={() => setUrlFocused(false)} onChange={e => { resetResult(); setUrl(e.target.value); }} placeholder="Вставь ссылку с YouTube сюда" aria-invalid={!!error} aria-describedby={error ? "url-error" : undefined}/ >}{url && <button type="button" className="icon-button" aria-label="Очистить ссылку" onClick={() => { resetResult(); setUrl(''); setUrlFocused(true); }}><X size={16}/></button>}</div><button className="primary-button" type="submit" disabled={loading}>{loading ? 'Ищем варианты…' : 'Показать варианты'} <ArrowRight size={18}/></button></div>
-              {error && <p id="url-error" role="alert" className="error">{error}</p>}
+              <label className="input-label" htmlFor="video-url">{en ? `YouTube ${mode === 'video' ? 'video' : 'track'} link` : `Ссылка на ${mode === 'video' ? 'видео' : 'трек'} YouTube`}</label>
+              <div className={`url-row ${parseYouTubeUrl(url) && !urlFocused ? 'url-row-filled' : ''}`}><div className={`url-field ${error ? "invalid" : ""} ${parseYouTubeUrl(url) && !urlFocused ? "url-filled" : ""}`}><Link2 size={20}/>{parseYouTubeUrl(url) && !urlFocused ? <button type="button" className="url-summary" onClick={() => setUrlFocused(true)} aria-label={en ? "Edit link" : "Изменить ссылку"} title={en ? "Click to edit" : "Нажмите, чтобы изменить ссылку"}><span>{url.includes('youtu.be') ? 'youtu.be' : url.includes('music.youtube.com') ? 'YouTube Music' : 'youtube.com'}</span><span className="url-summary-state"><Check size={14}/> {en ? "Link added" : "Ссылка добавлена"}</span></button> : <input ref={urlInput} id="video-url" name="youtube-video-url" type="text" inputMode="url" autoComplete="off" autoCorrect="off" autoCapitalize="none" spellCheck={false} value={url} onFocus={() => setUrlFocused(true)} onBlur={() => setUrlFocused(false)} onChange={e => { resetResult(); setUrl(e.target.value); }} placeholder={en ? "Paste a YouTube link here" : "Вставь ссылку с YouTube сюда"} aria-invalid={!!error} aria-describedby={error ? "url-error" : undefined}/ >}{url && <button type="button" className="icon-button" aria-label={en ? "Clear link" : "Очистить ссылку"} onClick={() => { resetResult(); setUrl(''); setUrlFocused(true); }}><X size={16}/></button>}</div><button className="primary-button" type="submit" disabled={loading}>{loading ? (en ? 'Finding options…' : 'Ищем варианты…') : (en ? 'Show options' : 'Показать варианты')} <ArrowRight size={18}/></button></div>
+              {error && <p id="url-error" role="alert" className="error">{en && error === "Введите корректную ссылку на видео YouTube: youtube.com/watch?v=… или youtu.be/…" ? "Enter a valid YouTube link: youtube.com/watch?v=… or youtu.be/…" : error}</p>}
             </form>
-            <div className="input-hint"><span><ShieldCheck size={14}/> Открытые видео и ролики по ссылке</span><button onClick={showDemo}>Посмотреть пример <ArrowRight size={13}/></button></div>
+            <div className="input-hint"><span><ShieldCheck size={14}/> {en ? "Public and unlisted videos" : "Открытые видео и ролики по ссылке"}</span><button onClick={showDemo}>{en ? "See an example" : "Посмотреть пример"} <ArrowRight size={13}/></button></div>
             {notice && <div className="notice" role="status"><CircleHelp size={18}/><span>{notice}</span></div>}
-            {loading && <div className="analysis-loading" role="status"><LoaderCircle className="flow-spinner" size={26}/><div><strong>Находим ваше видео</strong><p>Проверяем доступное качество и звук. Обычно это несколько секунд.</p></div></div>}
+            {loading && <div className="analysis-loading" role="status"><LoaderCircle className="flow-spinner" size={26}/><div><strong>{en ? "Finding your video" : "Находим ваше видео"}</strong><p>{en ? "Checking available quality and audio. This usually takes a few seconds." : "Проверяем доступное качество и звук. Обычно это несколько секунд."}</p></div></div>}
             {media && <MediaResult key={`${media.id}:${mode}`} media={media} mode={mode}/>}
             {!media && <DownloadAction key={mode} mode={mode} restoreOnly/>}
             {demo && <div className="demo-panel">

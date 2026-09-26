@@ -103,3 +103,5 @@ summary svg { transition: transform 220ms ease; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+.language-switch{display:flex;gap:2px;padding:3px;border:1px solid var(--line,#34402f);border-radius:999px;margin-left:14px;background:#10150f}.language-switch button{border:0;background:transparent;color:#9aa696;font-size:11px;font-weight:700;letter-spacing:.08em;padding:6px 8px;border-radius:999px;cursor:pointer}.language-switch button.active{background:#c2ff70;color:#17200f}.language-switch button:hover{color:#c2ff70}
+@media (max-width:700px){.language-switch{margin-left:auto;margin-right:8px}.header-label{display:none}}
