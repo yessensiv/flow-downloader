@@ -9,11 +9,13 @@ import java.util.concurrent.Executors
 /** Owns the download independently of the screen. One explicit user job at a time. */
 class DownloadService : Service() {
     data class State(val id: Long, val media: Media, val choice: Choice,
-        val running: Boolean = true, val progress: Int = -1, val file: File? = null, val error: String = "")
+        val running: Boolean = true, val progress: Int = -1, val etaSeconds: Long = -1,
+        val speed: String = "", val stage: String = "", val file: File? = null, val error: String = "")
     companion object {
         @Volatile var state: State? = null
             private set
         const val CANCEL = "app.flow.downloader.CANCEL"
+        const val CANCELLED = "CANCELLED"
         private const val CHANNEL = "downloads"
         private const val NOTIFICATION = 10
         fun forgetCompleted() { if (state?.running != true) state = null }
@@ -28,7 +30,7 @@ class DownloadService : Service() {
     override fun onBind(intent: Intent?) = null
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         if (intent?.action == CANCEL) {
-            finish(error = word("Загрузка отменена.", "Download cancelled."))
+            finish(error = CANCELLED)
             return START_NOT_STICKY
         }
         if (state?.running == true) return START_NOT_STICKY
@@ -45,14 +47,20 @@ class DownloadService : Service() {
         main.postDelayed(deadline, 3_600_000L)
         worker.execute {
             try {
-                val file = MediaEngine(applicationContext).download(media, choice) { value ->
+                val file = MediaEngine(applicationContext).download(media, choice) { value, etaSeconds, line ->
                     main.post {
                         if (!finished) {
                             val percent = if (value < 0) -1 else value.toInt().coerceIn(0, 100)
-                            if (state?.progress != percent) {
-                                state = state?.copy(progress = percent)
-                                notifySafely()
+                            val speed = Regex("\\bat\\s+([0-9.]+\\s*[KMG]?i?B/s)").find(line)?.groupValues?.get(1).orEmpty()
+                            val stage = when {
+                                line.contains("[Merger]", true) -> word("Объединяем видео и звук", "Combining video and audio")
+                                line.contains("[ExtractAudio]", true) -> word("Готовим аудио", "Preparing audio")
+                                percent >= 0 -> word("Загружаем видео и звук", "Downloading video and audio")
+                                else -> word("Подключаемся к YouTube", "Connecting to YouTube")
                             }
+                            state = state?.copy(progress = percent, etaSeconds = etaSeconds,
+                                speed = speed.ifBlank { state?.speed.orEmpty() }, stage = stage)
+                            notifySafely()
                         }
                     }
                 }
@@ -73,7 +81,13 @@ class DownloadService : Service() {
             .setContentIntent(open).setOnlyAlertOnce(true)
             .setOngoing(current?.running == true).setAutoCancel(current?.running != true)
         if (current?.running == true) {
-            builder.setContentText(if (current.progress < 0) word("Готовим файл…", "Preparing file…") else "${current.progress}%")
+            val details = buildList {
+                if (current.progress >= 0) add("${current.progress}%")
+                if (current.speed.isNotBlank()) add(current.speed)
+                if (current.etaSeconds >= 0 && current.progress in 0..99)
+                    add(word("~${current.etaSeconds} сек", "~${current.etaSeconds}s left"))
+            }.joinToString(" · ")
+            builder.setContentText(details.ifBlank { current.stage.ifBlank { word("Готовим файл…", "Preparing file…") } })
                 .setProgress(100, current.progress.coerceAtLeast(0), current.progress < 0)
                 .addAction(Notification.Action.Builder(null, word("Отмена", "Cancel"),
                     PendingIntent.getService(this, 1, Intent(this, DownloadService::class.java).setAction(CANCEL), PendingIntent.FLAG_IMMUTABLE)).build())

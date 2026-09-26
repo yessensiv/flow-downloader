@@ -78,12 +78,12 @@ class MediaEngine(private val context: Context) {
         require(choices.isNotEmpty()) { "EMPTY" }
         return Media(url, json.optString("title", "YouTube"), choices, json.optString("thumbnail"))
     }
-    fun download(media: Media, choice: Choice, progress: (Float) -> Unit): File {
+    fun download(media: Media, choice: Choice, progress: (Float, Long, String) -> Unit): File {
         ensureCurrent()
         try { return downloadOnce(media, choice, progress) }
         catch (failure: Exception) {
             if (!(failure.message.orEmpty().contains("403") || failure.message.orEmpty().contains("Requested format is not available"))) throw failure
-            progress(-1f)
+            progress(-1f, -1L, "")
             update()
             val fresh = analyze(media.url)
             val replacement = fresh.choices.firstOrNull { it.label == choice.label && it.audio == choice.audio && it.mp3 == choice.mp3 }
@@ -91,7 +91,7 @@ class MediaEngine(private val context: Context) {
             return downloadOnce(fresh, replacement, progress)
         }
     }
-    private fun downloadOnce(media: Media, choice: Choice, progress: (Float) -> Unit): File {
+    private fun downloadOnce(media: Media, choice: Choice, progress: (Float, Long, String) -> Unit): File {
         val dir = File(context.cacheDir, "download-${System.currentTimeMillis()}").apply { mkdirs() }
         try {
             val req = request(media.url).apply {
@@ -101,7 +101,7 @@ class MediaEngine(private val context: Context) {
                 if (!choice.audio) addOption("--merge-output-format", "mkv")
                 if (choice.mp3) { addOption("-x"); addOption("--audio-format", "mp3"); addOption("--audio-quality", "192K") }
             }
-            YoutubeDL.getInstance().execute(req, "flow-download") { value, _, _ -> progress(value) }
+            YoutubeDL.getInstance().execute(req, "flow-download") { value, eta, line -> progress(value, eta, line) }
             return dir.listFiles()?.singleOrNull { it.isFile && it.extension in listOf("mp4", "mkv", "webm", "m4a", "mp3", "opus") }
                 ?: error("EMPTY")
         } catch (error: Exception) { dir.deleteRecursively(); throw error }

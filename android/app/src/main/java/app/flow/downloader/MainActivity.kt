@@ -27,6 +27,7 @@ class MainActivity : Activity() {
     private lateinit var root: LinearLayout
     private lateinit var input: EditText
     private lateinit var status: TextView
+    private lateinit var cancelDownload: Button
     private lateinit var title: TextView
     private lateinit var spinner: Spinner
     private lateinit var progress: ProgressBar
@@ -171,6 +172,15 @@ class MainActivity : Activity() {
         progress.indeterminateTintList = ColorStateList.valueOf(lime)
         root.addView(progress)
         status = label("", 14).apply { setLineSpacing(dp(4).toFloat(), 1f) }
+        cancelDownload = button("") {
+            AlertDialog.Builder(this).setTitle(text("Отменить загрузку?", "Cancel download?"))
+                .setMessage(text("Текущий файл будет удалён из временных данных приложения.", "The in-progress file will be discarded."))
+                .setNegativeButton(text("Продолжить", "Keep downloading"), null)
+                .setPositiveButton(text("Отменить загрузку", "Cancel download")) { _, _ ->
+                    startService(Intent(this, DownloadService::class.java).setAction(DownloadService.CANCEL))
+                }.show()
+        }
+        style(cancelDownload, false)
         save = button("") {
             val file = ready ?: return@button
             val mime = when (file.extension) { "mp3" -> "audio/mpeg"; "m4a" -> "audio/mp4"; "mkv" -> "video/x-matroska"; "mp4" -> "video/mp4"; "webm" -> if (audio) "audio/webm" else "video/webm"; else -> "application/octet-stream" }
@@ -275,6 +285,8 @@ class MainActivity : Activity() {
         qualityLabel.visibility = title.visibility; spinner.visibility = title.visibility
         download.visibility = if (media != null && ready == null) View.VISIBLE else View.GONE
         progress.visibility = if (busy) View.VISIBLE else View.GONE
+        cancelDownload.text = text("✕  Отменить загрузку", "✕  Cancel download")
+        cancelDownload.visibility = if (busy && DownloadService.state?.running == true) View.VISIBLE else View.GONE
         details.text = text("Подробности ошибки", "Error details")
         details.visibility = if (lastError.isNotEmpty()) View.VISIBLE else View.GONE
         style(language, false); style(mode, !audio); style(audioMode, audio)
@@ -287,6 +299,7 @@ class MainActivity : Activity() {
         error.contains("403") -> text("YouTube отклонил скачивание даже после обновления. Попробуйте другую ссылку или сеть.", "YouTube refused the download after the update. Try another link or network.")
         error == "LIVE" -> text("Дождитесь завершения трансляции.", "Wait for the livestream to finish.")
         error == "FORMAT_CHANGED" -> text("Набор форматов изменился. Нажмите «Показать варианты» заново.", "Formats have changed. Tap Show options again.")
+        error == DownloadService.CANCELLED -> text("Загрузка отменена. Временный файл удалён.", "Download cancelled. The temporary file was removed.")
         error.contains("update", true) -> text("Не удалось обновить обработчик. Проверьте интернет и повторите обновление.", "Could not update the engine. Check your connection and retry the update.")
         else -> text("Не удалось завершить операцию. Подробности доступны ниже.", "Could not finish. Error details are available below.")
     }
@@ -375,11 +388,24 @@ class MainActivity : Activity() {
             title.text = current.media.title; refreshChoices(); loadThumbnail(current.media)
         }
         busy = current.running; ready = current.file?.takeIf { it.exists() }; lastError = current.error
-        progress.isIndeterminate = current.progress < 0
+        progress.isIndeterminate = current.running && current.progress < 0
         progress.setProgress(current.progress.coerceAtLeast(0), motionEnabled())
         refresh()
-        if (busy) status.text = text("Загрузка в фоне", "Downloading in background") + if (current.progress >= 0) " · ${current.progress}%" else "…"
+        if (busy) {
+            val parts = mutableListOf<String>()
+            if (current.progress >= 0) parts += "${current.progress}%"
+            if (current.speed.isNotBlank()) parts += text("скорость ${current.speed}", "speed ${current.speed}")
+            if (current.etaSeconds >= 0 && current.progress in 0..99)
+                parts += text("осталось ${formatDuration(current.etaSeconds)}", "${formatDuration(current.etaSeconds)} left")
+            val details = parts.joinToString(" · ").ifBlank { text("Вычисляем скорость и время…", "Calculating speed and time…") }
+            status.text = (current.stage.ifBlank { text("Загрузка", "Downloading") }) + "\n" + details
+        }
         else { followingDownload = false; offerPendingShare() }
+    }
+    private fun formatDuration(seconds: Long): String = when {
+        seconds < 60 -> text("${seconds} сек", "${seconds}s")
+        seconds < 3600 -> text("${seconds / 60} мин ${seconds % 60} сек", "${seconds / 60}m ${seconds % 60}s")
+        else -> text("${seconds / 3600} ч ${(seconds % 3600) / 60} мин", "${seconds / 3600}h ${(seconds % 3600) / 60}m")
     }
     private fun saveToMediaStore(file: File, rawTitle: String, mime: String) {
         if (busy) return
