@@ -27,6 +27,8 @@ import java.util.concurrent.Executors
 
 class DownloadsActivity : Activity() {
     private lateinit var list: LinearLayout
+    private lateinit var header: LinearLayout
+    private lateinit var navigation: LinearLayout
     private lateinit var results: LinearLayout
     private lateinit var tabs: LinearLayout
     private lateinit var selectionBar: LinearLayout
@@ -70,13 +72,19 @@ class DownloadsActivity : Activity() {
         pendingBulkDeletion = savedInstanceState?.getStringArrayList("pendingBulkDeletion")
             ?.let { uris -> history.list().filter { it.uri in uris } }.orEmpty()
         val scroll = ScrollView(this).apply { setBackgroundColor(Color.rgb(15, 20, 16)); isFillViewport = true }
-        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(24)) }
-        scroll.addView(list); setContentView(scroll)
-        scroll.setOnApplyWindowInsetsListener { view, insets ->
+        list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), dp(24)) }
+        header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), 0) }
+        val screen = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(15, 20, 16))
+            addView(header)
+            addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
+        }
+        scroll.addView(list); setContentView(screen)
+        screen.setOnApplyWindowInsetsListener { view, insets ->
             view.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
             insets
         }
-        scroll.requestApplyInsets()
+        screen.requestApplyInsets()
         buildHeader()
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
@@ -122,13 +130,10 @@ class DownloadsActivity : Activity() {
         setOnClickListener { click() }
     }
     private fun buildHeader() {
-        val navigation = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL }
-        navigation.addView(action(text("‹  Назад", "‹  Back")) { finish() }, LinearLayout.LayoutParams(dp(110), dp(48)))
-        navigation.addView(Space(this), LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(8) })
-        list.addView(navigation, LinearLayout.LayoutParams(-1, dp(48)))
-        list.addView(label(text("Мои загрузки", "My downloads"), 28))
-        list.addView(label(text("Видео и музыка — каждый файл на своём месте.",
-            "Your saved videos and music, neatly separated."), 15, true))
+        navigation = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        navigation.addView(cardAction("‹", text("Назад", "Back")) { finish() }.apply { textSize = 30f }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        navigation.addView(label(text("Мои загрузки", "My downloads"), 22), LinearLayout.LayoutParams(0, -2, 1f))
+        header.addView(navigation, LinearLayout.LayoutParams(-1, -2))
         search = EditText(this).apply {
             textSize = 16f; setSingleLine(); setTextColor(Color.WHITE)
             setHintTextColor(Color.rgb(144, 159, 144)); hint = text("Поиск по названию", "Search by title")
@@ -136,15 +141,16 @@ class DownloadsActivity : Activity() {
             background = GradientDrawable().apply { setColor(Color.rgb(20, 27, 21)); cornerRadius = dp(14).toFloat(); setStroke(dp(1), Color.rgb(54, 67, 54)) }
             setPadding(dp(16), dp(12), dp(16), dp(12)); minimumHeight = dp(54)
         }
-        list.addView(search, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(4) })
+        header.addView(search, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(4) })
         tabs = LinearLayout(this)
-        list.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(12) })
+        header.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(8) })
         selectionBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(10))
             background = GradientDrawable().apply { setColor(Color.rgb(23, 31, 24)); cornerRadius = dp(16).toFloat() }
             visibility = View.GONE
         }
         val summary = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
+        summary.addView(cardAction("‹", text("Отменить выбор", "Cancel selection")) { toggleSelectionMode() }.apply { textSize = 30f }, LinearLayout.LayoutParams(dp(48), dp(48)))
         selectAll = CheckBox(this).apply {
             textSize = 13f; setTextColor(Color.WHITE); buttonTintList = ColorStateList.valueOf(lime)
             setOnCheckedChangeListener { _, checked ->
@@ -156,16 +162,13 @@ class DownloadsActivity : Activity() {
                 } else updateSelectionUi(visibleItems())
             }
         }
-        summary.addView(selectAll, LinearLayout.LayoutParams(0, dp(42), 1f))
-        selectionCount = TextView(this).apply { textSize = 13f; setTextColor(Color.rgb(175, 190, 174)); gravity = android.view.Gravity.CENTER_VERTICAL }
-        summary.addView(selectionCount)
+        selectionCount = TextView(this).apply { textSize = 20f; setTextColor(Color.WHITE); gravity = android.view.Gravity.CENTER_VERTICAL }
+        summary.addView(selectionCount, LinearLayout.LayoutParams(0, dp(48), 1f))
+        summary.addView(iconAction(R.drawable.ic_share_outline, text("Поделиться", "Share")) { shareSelected() }.apply { tag = "bulk-share" }, LinearLayout.LayoutParams(dp(48), dp(48)))
+        summary.addView(iconAction(R.drawable.ic_delete_outline, text("Удалить", "Delete")) { confirmDeleteSelected() }.apply { tag = "bulk-delete" }, LinearLayout.LayoutParams(dp(48), dp(48)))
         selectionBar.addView(summary)
-        val bulkActions = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-        bulkActions.addView(action("") { shareSelected() }.apply { tag = "bulk-share" }, LinearLayout.LayoutParams(0, dp(44), 1f))
-        bulkActions.addView(action("") { confirmDeleteSelected() }.apply { tag = "bulk-delete" },
-            LinearLayout.LayoutParams(0, dp(44), 1f).apply { leftMargin = dp(8) })
-        selectionBar.addView(bulkActions)
-        list.addView(selectionBar, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
+        selectionBar.addView(selectAll, LinearLayout.LayoutParams(-1, dp(48)))
+        header.addView(selectionBar, 0, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         results = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
         list.addView(results)
     }
@@ -176,7 +179,7 @@ class DownloadsActivity : Activity() {
             val count = all.count { it.isAudio == audio }
             val name = if (audio) text("Музыка", "Music") else text("Видео", "Video")
             tabs.addView(action("$name · $count") {
-                if (music != audio) selectedUris.clear()
+                if (music != audio) { selectedUris.clear(); selecting = false }
                 music = audio; render()
             }.apply {
                 if (music == audio) {
@@ -193,7 +196,10 @@ class DownloadsActivity : Activity() {
         val items = history.list().filter { it.isAudio == music && it.title.contains(query.trim(), ignoreCase = true) }
         if (items.isEmpty()) results.addView(label(if (query.isNotBlank()) text("Ничего не найдено. Попробуйте другое название.", "No matches. Try another title.") else if (music) text("Музыки пока нет\nСохраните аудио из Flow — оно появится здесь.",
             "No music yet\nSave audio from Flow to see it here.") else text("Видео пока нет\nСохраните видео из Flow — оно появится здесь.",
-            "No videos yet\nSave a video from Flow to see it here."), 17, true))
+            "No videos yet\nSave a video from Flow to see it here."), 17, true).apply {
+                gravity = android.view.Gravity.CENTER
+                setPadding(dp(24), dp(48), dp(24), dp(48))
+            })
         items.forEach { item ->
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL; gravity = android.view.Gravity.CENTER_VERTICAL
@@ -268,7 +274,7 @@ class DownloadsActivity : Activity() {
                 if (cached != null) thumbnail.setImageBitmap(cached) else loadThumbnail(item.thumbnail, thumbnail)
             }
             else thumbnail.setImageResource(if (item.isAudio) android.R.drawable.ic_media_play else android.R.drawable.ic_menu_slideshow)
-            row.addView(thumbnail, LinearLayout.LayoutParams(dp(104), dp(60)).apply { rightMargin = dp(11) })
+            row.addView(thumbnail, LinearLayout.LayoutParams(dp(if (item.isAudio) 60 else 96), dp(60)).apply { rightMargin = dp(12) })
 
             val details = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL; gravity = android.view.Gravity.CENTER_VERTICAL
@@ -283,7 +289,7 @@ class DownloadsActivity : Activity() {
                 setPadding(0, 0, 0, 0)
             })
             row.addView(details, LinearLayout.LayoutParams(0, dp(60), 1f))
-            if (!selecting) row.addView(cardAction("⋮", text("Действия с файлом", "File actions")) {
+            if (!selecting) row.addView(iconAction(R.drawable.ic_more_vertical, text("Действия с файлом", "File actions")) {
                 AlertDialog.Builder(this).setTitle(item.title)
                     .setItems(arrayOf(
                         text("Открыть", "Open"),
@@ -299,7 +305,7 @@ class DownloadsActivity : Activity() {
                         }
                     }.show()
             }.apply { isEnabled = !deleting; alpha = if (deleting) .45f else 1f },
-                LinearLayout.LayoutParams(dp(44), dp(48)))
+                LinearLayout.LayoutParams(dp(48), dp(48)))
             results.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
         }
         updateSelectionUi(items)
@@ -335,14 +341,9 @@ class DownloadsActivity : Activity() {
     }
 
     private fun updateSelectionUi(visible: List<SavedDownload>) {
+        if (selectedUris.isEmpty()) selecting = false
         selectionBar.visibility = if (selecting && selectedUris.isNotEmpty()) View.VISIBLE else View.GONE
-        val navigation = list.getChildAt(0) as? LinearLayout
-        navigation?.getChildAt(0)?.let { button ->
-            (button as? Button)?.apply {
-                text = if (selecting) text("‹  Отмена", "‹  Cancel") else text("‹  Назад", "‹  Back")
-                setOnClickListener { if (selecting) toggleSelectionMode() else finish() }
-            }
-        }
+        navigation.visibility = if (selecting) View.GONE else View.VISIBLE
         if (!selecting) return
         selectAll.setOnCheckedChangeListener(null)
         val visibleUris = visible.map { it.uri }
@@ -365,18 +366,26 @@ class DownloadsActivity : Activity() {
         }
         val count = selectedItems().size
         selectionCount.text = text("Выбрано: $count", "Selected: $count")
-        val share = selectionBar.findViewWithTag<Button>("bulk-share")
-        val delete = selectionBar.findViewWithTag<Button>("bulk-delete")
-        share.text = text("↗  Поделиться", "↗  Share")
-        delete.text = text("Удалить", "Delete")
-        delete.compoundDrawablePadding = dp(8)
-        delete.setCompoundDrawablesRelativeWithIntrinsicBounds(
-            getDrawable(android.R.drawable.ic_menu_delete)?.mutate()?.apply { setTint(lime) }, null, null, null
-        )
+        val share = selectionBar.findViewWithTag<ImageButton>("bulk-share")
+        val delete = selectionBar.findViewWithTag<ImageButton>("bulk-delete")
         listOf(share, delete).forEach { button ->
             button.isEnabled = count > 0 && !deleting
             button.alpha = if (button.isEnabled) 1f else .45f
         }
+    }
+
+    private fun iconAction(icon: Int, description: String, click: () -> Unit) = ImageButton(this).apply {
+        setImageResource(icon); imageTintList = ColorStateList.valueOf(lime)
+        contentDescription = description; tooltipText = description
+        setPadding(dp(12), dp(12), dp(12), dp(12))
+        background = RippleDrawable(ColorStateList.valueOf(Color.argb(42, 194, 255, 112)), null,
+            GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(24).toFloat() })
+        setOnClickListener { click() }
+    }
+
+    @Deprecated("Legacy activity back handling")
+    override fun onBackPressed() {
+        if (selecting) toggleSelectionMode() else super.onBackPressed()
     }
 
     private fun shareSelected() {
