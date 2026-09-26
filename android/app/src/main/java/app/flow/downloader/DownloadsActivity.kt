@@ -47,7 +47,7 @@ class DownloadsActivity : Activity() {
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
     private val lime = Color.rgb(194, 255, 112)
     private fun animateRows() {
-        if (!ValueAnimator.areAnimatorsEnabled()) return
+        if (selecting || !ValueAnimator.areAnimatorsEnabled()) return
         (0 until results.childCount).forEach { index ->
             val child = results.getChildAt(index)
             child.alpha = 0f; child.translationY = dp(6).toFloat()
@@ -285,7 +285,11 @@ class DownloadsActivity : Activity() {
         val share = selectionBar.findViewWithTag<Button>("bulk-share")
         val delete = selectionBar.findViewWithTag<Button>("bulk-delete")
         share.text = text("↗  Поделиться", "↗  Share")
-        delete.text = text("⌫  Удалить", "⌫  Delete")
+        delete.text = text("Удалить", "Delete")
+        delete.compoundDrawablePadding = dp(8)
+        delete.setCompoundDrawablesRelativeWithIntrinsicBounds(
+            getDrawable(android.R.drawable.ic_menu_delete)?.mutate()?.apply { setTint(lime) }, null, null, null
+        )
         listOf(share, delete).forEach { button ->
             button.isEnabled = count > 0 && !deleting
             button.alpha = if (button.isEnabled) 1f else .45f
