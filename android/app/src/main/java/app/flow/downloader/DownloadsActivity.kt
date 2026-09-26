@@ -135,14 +135,30 @@ class DownloadsActivity : Activity() {
     }
     private fun deleteFile(item: SavedDownload) {
         if (deleting) return
+        if (android.os.Build.VERSION.SDK_INT >= 30) {
+            val mediaUri = runCatching { android.provider.MediaStore.getMediaUri(this, Uri.parse(item.uri)) }.getOrNull()
+            if (mediaUri != null) {
+                pendingDeletion = item
+                try {
+                    startIntentSenderForResult(
+                        android.provider.MediaStore.createDeleteRequest(contentResolver, listOf(mediaUri)).intentSender,
+                        31, null, 0, 0, 0
+                    )
+                } catch (_: Exception) {
+                    pendingDeletion = null
+                    AlertDialog.Builder(this).setMessage(text("Android не смог открыть подтверждение удаления. Файл и запись оставлены.",
+                        "Android could not show its delete confirmation. The file and entry were kept."))
+                        .setPositiveButton("OK", null).show()
+                }
+                return
+            }
+        }
         deleting = true; render()
         worker.execute {
             var fileDeleted = false
             val result = runCatching {
                 history.deleteFile(item) { value ->
                     val uri = Uri.parse(value)
-                    if (checkUriPermission(uri, android.os.Process.myPid(), android.os.Process.myUid(), Intent.FLAG_GRANT_WRITE_URI_PERMISSION) != android.content.pm.PackageManager.PERMISSION_GRANTED)
-                        throw SecurityException("Write permission required")
                     require(android.provider.DocumentsContract.isDocumentUri(this, uri))
                     val supports = contentResolver.query(uri, arrayOf(android.provider.DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use {
                         it.moveToFirst() && it.getInt(0) and android.provider.DocumentsContract.Document.FLAG_SUPPORTS_DELETE != 0
@@ -180,6 +196,23 @@ class DownloadsActivity : Activity() {
     @Deprecated("Uses system document picker")
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         super.onActivityResult(requestCode, resultCode, data)
+        if (requestCode == 31) {
+            val item = pendingDeletion ?: return
+            pendingDeletion = null
+            if (resultCode == RESULT_OK) {
+                worker.execute {
+                    val result = runCatching { history.remove(item.uri) }
+                    runOnUiThread {
+                        if (isDestroyed) return@runOnUiThread
+                        render()
+                        if (result.isFailure) AlertDialog.Builder(this)
+                            .setMessage(text("Android удалил файл, но историю обновить не удалось.", "Android deleted the file, but the history could not be updated."))
+                            .setPositiveButton("OK", null).show()
+                    }
+                }
+            }
+            return
+        }
         if (requestCode != 30) return
         val item = pendingDeletion ?: return
         pendingDeletion = null

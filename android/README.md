@@ -72,6 +72,15 @@ Android 8+, ARM64 / ARMv7 или эмулятор x86_64. Вставьте сс�
 - Device-тесты проверяют категории и контракт удаления с подставной операцией (успех, false,
   SecurityException). Реальное удаление SAF-файла тестировать отдельно на ненужном файле.
 
+## Версия 0.6.0
+
+- Для SAF-документов, сопоставимых с MediaStore (ExternalStorageProvider/MediaDocumentsProvider),
+  удаление просит подтверждение Android через MediaStore.createDeleteRequest. Запись истории
+  убирается только после результата RESULT_OK.
+- Для остальных SAF-провайдеров сохраняется удаление через DocumentsContract; системный picker
+  повторно запрашивает доступ при необходимости. Отказ пользователя сохраняет запись.
+- Android system-confirmation UI requires manual check on the phone for the target document provider.
+
 ## Версия 0.2.0
 
 - Проверка обновлений yt-dlp перед первым анализом и затем раз в сутки.
