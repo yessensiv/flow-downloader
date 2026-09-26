@@ -36,6 +36,9 @@ class MainActivity : Activity() {
     private lateinit var qualityLabel: TextView
     private lateinit var details: Button
     private lateinit var resultCard: LinearLayout
+    private lateinit var heading: TextView
+    private lateinit var linkLabel: TextView
+    private lateinit var resultLabel: TextView
     private var saved = false
     private var lastError = ""
     private lateinit var update: Button
@@ -53,14 +56,20 @@ class MainActivity : Activity() {
         super.onCreate(savedInstanceState)
         english = getPreferences(0).getBoolean("english", false)
         engine = MediaEngine(applicationContext)
-        val scroll = ScrollView(this).apply { setBackgroundColor(Color.rgb(15, 20, 16)) }
-        root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(24), dp(24), dp(24), dp(24)) }
+        window.statusBarColor = Color.rgb(15, 20, 16)
+        window.navigationBarColor = Color.rgb(15, 20, 16)
+        val scroll = ScrollView(this).apply {
+            setBackgroundColor(Color.rgb(15, 20, 16)); isFillViewport = true
+            clipToPadding = true
+        }
+        root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(24)) }
         scroll.addView(root)
         setContentView(scroll)
-        root.setOnApplyWindowInsetsListener { view, insets ->
-            view.setPadding(dp(24), dp(24) + insets.systemWindowInsetTop, dp(24), dp(24) + insets.systemWindowInsetBottom)
+        scroll.setOnApplyWindowInsetsListener { view, insets ->
+            view.setPadding(insets.systemWindowInsetLeft, insets.systemWindowInsetTop, insets.systemWindowInsetRight, insets.systemWindowInsetBottom)
             insets
         }
+        scroll.requestApplyInsets()
         val brand = label("flow.", 34).apply { setTextColor(lime) }
         language = button("RU / EN") { english = !english; getPreferences(0).edit().putBoolean("english", english).apply(); refresh() }
         root.removeView(brand); root.removeView(language)
@@ -69,7 +78,8 @@ class MainActivity : Activity() {
             addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
             addView(language, LinearLayout.LayoutParams(dp(90), dp(44)))
         })
-        subtitle = label("", 18).apply { setTextColor(Color.rgb(170, 185, 169)) }
+        heading = label("", 30).apply { setPadding(0, dp(28), 0, dp(6)); setLineSpacing(dp(3).toFloat(), 1f) }
+        subtitle = label("", 16).apply { setTextColor(Color.rgb(170, 185, 169)); setPadding(0, 0, 0, dp(20)) }
         mode = button("") { switchMode(false) }
         audioMode = button("") { switchMode(true) }
         root.removeView(mode); root.removeView(audioMode)
@@ -79,8 +89,9 @@ class MainActivity : Activity() {
             addView(mode, LinearLayout.LayoutParams(0, dp(48), 1f))
             addView(audioMode, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(20) })
+        linkLabel = label("", 14).apply { setTextColor(Color.rgb(175, 190, 174)); setPadding(0, 0, 0, dp(10)) }
         input = EditText(this).apply {
-            textSize = 18f; setSingleLine(); setTextColor(Color.WHITE); setHintTextColor(Color.LTGRAY)
+            textSize = 16f; setSingleLine(); setTextColor(Color.WHITE); setHintTextColor(Color.rgb(144, 159, 144))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             background = surface(); setPadding(dp(16), dp(14), dp(16), dp(14))
             minimumHeight = dp(58)
@@ -96,8 +107,9 @@ class MainActivity : Activity() {
                 }
             }
         }
-        title = label("", 22).apply { setPadding(0, dp(26), 0, dp(12)) }
-        qualityLabel = label("", 14).apply { setTextColor(Color.LTGRAY) }
+        resultLabel = label("", 13).apply { setTextColor(lime); setPadding(0, 0, 0, dp(8)) }
+        title = label("", 21).apply { setPadding(0, 0, 0, dp(16)); setTypeface(null, Typeface.BOLD); setLineSpacing(dp(3).toFloat(), 1f) }
+        qualityLabel = label("", 14).apply { setTextColor(Color.rgb(175, 190, 174)); setPadding(0, 0, 0, dp(6)) }
         spinner = Spinner(this).apply { background = surface(); minimumHeight = dp(56); setPadding(dp(10), 0, dp(10), 0) }
         root.addView(spinner)
         download = button("") {
@@ -115,17 +127,17 @@ class MainActivity : Activity() {
         }
         resultCard = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            background = surface(); setPadding(dp(18), dp(6), dp(18), dp(18))
+            background = surface(); setPadding(dp(20), dp(20), dp(20), dp(12))
         }
-        listOf(title, qualityLabel, spinner, download).forEach {
-            root.removeView(it); resultCard.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(10) })
+        listOf(resultLabel, title, qualityLabel, spinner, download).forEach {
+            root.removeView(it); resultCard.addView(it, LinearLayout.LayoutParams(-1, if (it == download || it == spinner) dp(54) else -2).apply { bottomMargin = dp(10) })
         }
         root.addView(resultCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(22); bottomMargin = dp(14) })
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply { max = 100 }
         progress.progressTintList = ColorStateList.valueOf(lime)
         progress.indeterminateTintList = ColorStateList.valueOf(lime)
         root.addView(progress)
-        status = label("", 17)
+        status = label("", 14).apply { setLineSpacing(dp(4).toFloat(), 1f) }
         save = button("") {
             val file = ready ?: return@button
             val mime = when (file.extension) { "mp3" -> "audio/mpeg"; "m4a" -> "audio/mp4"; "mkv" -> "video/x-matroska"; "mp4" -> "video/mp4"; "webm" -> if (audio) "audio/webm" else "video/webm"; else -> "application/octet-stream" }
@@ -152,27 +164,31 @@ class MainActivity : Activity() {
         job(text("Подготавливаем приложение…", "Setting things up…")) { engine.initialize() }
     }
     private fun switchMode(next: Boolean) {
-        audio = next; ready?.parentFile?.deleteRecursively(); ready = null
+        audio = next; saved = false; ready?.parentFile?.deleteRecursively(); ready = null
         lastError = ""; refreshChoices(); refresh()
     }
     private fun surface(color: Int = Color.rgb(28, 36, 29)) = GradientDrawable().apply {
         setColor(color); cornerRadius = dp(16).toFloat(); setStroke(dp(1), Color.rgb(49, 62, 49))
     }
     private fun style(button: Button, primary: Boolean) {
-        button.background = surface(if (primary) lime else Color.rgb(28, 36, 29))
+        button.background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(Color.argb(45, 255, 255, 255)), surface(if (primary) lime else Color.rgb(28, 36, 29)), null)
         button.setTextColor(if (primary) Color.rgb(20, 28, 16) else Color.rgb(220, 231, 216))
+        button.setTypeface(null, if (primary) Typeface.BOLD else Typeface.NORMAL)
         button.alpha = if (button.isEnabled) 1f else .45f
     }
     private fun refresh() {
-        language.text = if (english) "EN / RU" else "RU / EN"
-        subtitle.text = text("Твои видео. Твоя музыка. С собой.", "Your videos. Your music. To go.")
+        language.text = if (english) "EN · RU" else "RU · EN"
+        heading.text = text("Любимое — с собой.", "Keep what you love.")
+        subtitle.text = text("Видео и музыка прямо на телефоне.", "Video and music, right on your phone.")
+        linkLabel.text = text("Ссылка на YouTube", "YouTube link")
+        resultLabel.text = text("✓  Найдено на YouTube", "✓  Found on YouTube")
         mode.text = text("Видео", "Video"); audioMode.text = text("Аудио", "Audio")
-        qualityLabel.text = text("КАЧЕСТВО И ФОРМАТ", "QUALITY & FORMAT")
+        qualityLabel.text = if (audio) text("Формат аудио", "Audio format") else text("Качество видео", "Video quality")
         input.hint = text("Вставьте ссылку YouTube", "Paste a YouTube link")
         analyze.text = text("Показать варианты", "Show options")
-        download.text = text("Скачать на телефон", "Download to phone")
+        download.text = text("↓  Подготовить файл", "↓  Prepare download")
         save.text = text("Сохранить файл…", "Save file…")
-        update.text = text("Обновить обработчик YouTube", "Update YouTube engine")
+        update.text = text("↻  Обновить движок", "↻  Update engine")
         listOf(mode, audioMode, input, analyze, update).forEach { it.isEnabled = !busy }
         spinner.isEnabled = !busy
         download.isEnabled = !busy && choices.isNotEmpty()
@@ -186,7 +202,7 @@ class MainActivity : Activity() {
         details.visibility = if (lastError.isNotEmpty()) View.VISIBLE else View.GONE
         style(language, false); style(mode, !audio); style(audioMode, audio)
         style(analyze, media == null); style(download, true); style(save, true); style(update, false); style(details, false)
-        if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("Файл сохранён в выбранную папку.", "File saved to your chosen folder.") else if (ready != null) text("Готово! Сохраните файл в удобную папку.", "Ready! Save your file to a folder you choose.") else text("Скачивание прямо на телефон. Оставьте приложение открытым во время подготовки. Видео со звуком — MKV.", "Downloads directly to your phone. Keep the app open while preparing. Video with sound uses MKV.")
+        if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("✓ Файл сохранён в выбранную папку.", "✓ File saved to your chosen folder.") else if (ready != null) text("Готово! Выберите, куда сохранить файл.", "Ready! Choose where to save your file.") else text("Без сервера · Файлы остаются у вас\nНе закрывайте приложение во время загрузки.", "No server · Your files stay with you\nKeep the app open during downloads.")
         status.setTextColor(if (lastError.isNotEmpty()) Color.rgb(255, 171, 151) else Color.rgb(175, 190, 174))
     }
     private fun friendlyError(error: String): String = when {
@@ -199,7 +215,18 @@ class MainActivity : Activity() {
     }
     private fun refreshChoices() {
         choices = media?.choices?.filter { it.audio == audio } ?: emptyList()
-        spinner.adapter = ArrayAdapter(this, android.R.layout.simple_spinner_dropdown_item, choices.map { it.label })
+        spinner.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, choices.map { it.label }) {
+            private fun row(position: Int, dropdown: Boolean) = TextView(this@MainActivity).apply {
+                text = getItem(position) + if (dropdown) "" else "   ▾"
+                textSize = 16f; setTextColor(Color.rgb(235, 241, 232))
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(dp(14), dp(16), dp(14), dp(16))
+                setBackgroundColor(Color.rgb(28, 36, 29))
+                minHeight = dp(52)
+            }
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, false)
+            override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, true)
+        }
     }
     private fun job(message: String, block: () -> Unit) {
         if (busy) return
@@ -237,7 +264,7 @@ class MainActivity : Activity() {
         root.addView(this)
     }
     private fun button(value: String, action: () -> Unit) = Button(this).apply {
-        text = value; textSize = 17f; isAllCaps = false; setTextColor(Color.rgb(20, 28, 16))
+        text = value; textSize = 16f; isAllCaps = false; setTextColor(Color.rgb(20, 28, 16))
         background = GradientDrawable().apply { setColor(lime); cornerRadius = dp(16).toFloat() }
         root.addView(this, LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(12); bottomMargin = dp(8) })
         setOnClickListener { action() }
