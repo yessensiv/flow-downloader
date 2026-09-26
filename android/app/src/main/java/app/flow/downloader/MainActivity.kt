@@ -168,11 +168,11 @@ class MainActivity : Activity() {
         }
         title = label("", 18).apply { setPadding(0, 0, 0, dp(4)); setTypeface(null, Typeface.BOLD); maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
         qualityLabel = label("", 14).apply { setTextColor(Color.rgb(175, 190, 174)); setPadding(0, 0, 0, dp(6)) }
-        spinner = Spinner(this).apply { background = surface(); minimumHeight = dp(56); setPadding(dp(10), 0, dp(10), 0) }
+        spinner = optionSpinner { qualityLabel.text }.apply { background = surface(); minimumHeight = dp(56); setPadding(dp(10), 0, dp(10), 0) }
         root.addView(spinner)
         val exportPrefs = getSharedPreferences("export", MODE_PRIVATE)
         containerLabel = label("", 14)
-        containerSpinner = Spinner(this).apply {
+        containerSpinner = optionSpinner { containerLabel.text }.apply {
             background = surface(); minimumHeight = dp(54)
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, listOf("MKV", "MP4"))
         }
@@ -180,7 +180,7 @@ class MainActivity : Activity() {
         bitrateHint = label("", 12).apply {
             setTextColor(Color.rgb(153, 170, 150)); setPadding(dp(2), 0, dp(2), dp(6))
         }
-        bitrateSpinner = Spinner(this).apply {
+        bitrateSpinner = optionSpinner { bitrateLabel.text }.apply {
             background = surface(); minimumHeight = dp(54)
             adapter = ArrayAdapter(this@MainActivity, android.R.layout.simple_spinner_dropdown_item, bitrates.map { "$it kbps" })
             setSelection(bitrates.indexOf(exportPrefs.getInt("bitrate", 192)).coerceAtLeast(0))
@@ -460,6 +460,39 @@ class MainActivity : Activity() {
             style(exportSummary, false)
             advancedToggle.text = text("Дополнительно", "Advanced") + if (advancedFields.visibility == View.VISIBLE) "  −" else "  +"
             style(advancedToggle, false)
+        }
+    }
+
+    private fun optionSpinner(caption: () -> CharSequence) = object : Spinner(this, Spinner.MODE_DIALOG) {
+        override fun performClick(): Boolean {
+            if (!isEnabled || adapter == null || adapter.count == 0) return false
+            val labels = Array(adapter.count) { adapter.getItem(it).toString() }
+            val options = object : ArrayAdapter<String>(this@MainActivity, android.R.layout.simple_list_item_single_choice, labels) {
+                override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                    return (super.getView(position, convertView, parent) as CheckedTextView).apply {
+                        textSize = 16f
+                        setTextColor(if (position == selectedItemPosition) lime else Color.rgb(235, 241, 232))
+                        checkMarkTintList = ColorStateList.valueOf(lime)
+                        minHeight = dp(54)
+                        setPadding(dp(20), dp(12), dp(20), dp(12))
+                    }
+                }
+            }
+            val picker = AlertDialog.Builder(this@MainActivity)
+                .setTitle(caption())
+                .setSingleChoiceItems(options, selectedItemPosition) { dialog, position ->
+                    setSelection(position)
+                    refreshExportOptions()
+                    dialog.dismiss()
+                }
+                .setNegativeButton(text("Отмена", "Cancel"), null)
+                .create()
+            picker.setOnShowListener {
+                picker.window?.setBackgroundDrawable(surface(Color.rgb(22, 30, 23)))
+                picker.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(lime)
+            }
+            picker.show()
+            return true
         }
     }
 
