@@ -39,6 +39,10 @@ class DownloadsActivity : Activity() {
     private var english = false
     private var music = false
     private var query = ""
+    private var sortOrder = 0
+    private lateinit var sortButton: TextView
+    private var sortDialog: AlertDialog? = null
+    private var fileMenu: android.app.Dialog? = null
     private var deleting = false
     private var pendingDeletion: SavedDownload? = null
     private var pendingBulkDeletion: List<SavedDownload> = emptyList()
@@ -65,6 +69,7 @@ class DownloadsActivity : Activity() {
         super.onCreate(savedInstanceState)
         english = intent.getBooleanExtra("english", false)
         history = DownloadHistory(this)
+        sortOrder = getPreferences(0).getInt("sortOrder", 0).coerceIn(0, 5)
         music = savedInstanceState?.getBoolean("music") ?: false
         selecting = savedInstanceState?.getBoolean("selecting") ?: false
         selectedUris.addAll(savedInstanceState?.getStringArrayList("selectedUris").orEmpty())
@@ -144,6 +149,12 @@ class DownloadsActivity : Activity() {
         header.addView(search, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(4) })
         tabs = LinearLayout(this)
         header.addView(tabs, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(8) })
+        sortButton = cardAction("") { showSortOptions() }.apply {
+            setOnTouchListener(null)
+            gravity = android.view.Gravity.END or android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(12), 0, dp(12), 0)
+        }
+        header.addView(sortButton, LinearLayout.LayoutParams(-1, dp(48)))
         selectionBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(10))
             background = GradientDrawable().apply { setColor(Color.rgb(23, 31, 24)); cornerRadius = dp(16).toFloat() }
@@ -193,7 +204,10 @@ class DownloadsActivity : Activity() {
     }
     private fun renderItems() {
         results.removeAllViews()
-        val items = history.list().filter { it.isAudio == music && it.title.contains(query.trim(), ignoreCase = true) }
+        val items = visibleItems()
+        sortButton.text = text("Сортировка: ", "Sort: ") + sortLabels()[sortOrder] + "  ▾"
+        sortButton.contentDescription = sortButton.text
+        sortButton.isEnabled = !deleting
         if (items.isEmpty()) results.addView(label(if (query.isNotBlank()) text("Ничего не найдено. Попробуйте другое название.", "No matches. Try another title.") else if (music) text("Музыки пока нет\nСохраните аудио из Flow — оно появится здесь.",
             "No music yet\nSave audio from Flow to see it here.") else text("Видео пока нет\nСохраните видео из Flow — оно появится здесь.",
             "No videos yet\nSave a video from Flow to see it here."), 17, true).apply {
@@ -290,20 +304,7 @@ class DownloadsActivity : Activity() {
             })
             row.addView(details, LinearLayout.LayoutParams(0, dp(60), 1f))
             if (!selecting) row.addView(iconAction(R.drawable.ic_more_vertical, text("Действия с файлом", "File actions")) {
-                AlertDialog.Builder(this).setTitle(item.title)
-                    .setItems(arrayOf(
-                        text("Открыть", "Open"),
-                        text("Поделиться", "Share"),
-                        text("Удалить файл с устройства…", "Delete file from device…"),
-                        text("Убрать только запись (файл останется)", "Remove history only (keep file)")
-                    )) { _, which ->
-                        when (which) {
-                            0 -> access(item, false)
-                            1 -> access(item, true)
-                            2 -> confirmDelete(item)
-                            3 -> removeEntry(item)
-                        }
-                    }.show()
+                showFileMenu(item)
             }.apply { isEnabled = !deleting; alpha = if (deleting) .45f else 1f },
                 LinearLayout.LayoutParams(dp(48), dp(48)))
             results.addView(row, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(7) })
@@ -311,8 +312,103 @@ class DownloadsActivity : Activity() {
         updateSelectionUi(items)
         animateRows()
     }
-    private fun visibleItems(): List<SavedDownload> = history.list()
-        .filter { it.isAudio == music && it.title.contains(query.trim(), ignoreCase = true) }
+    private fun showFileMenu(item: SavedDownload) {
+        if (deleting || fileMenu?.isShowing == true) return
+        val dialog = android.app.Dialog(this)
+        fileMenu = dialog
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(20), dp(20), dp(20))
+            background = GradientDrawable().apply { setColor(Color.rgb(24, 32, 25)); cornerRadius = dp(24).toFloat() }
+        }
+        panel.addView(label(item.title, 18).apply {
+            setTypeface(null, Typeface.BOLD); maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
+        })
+        panel.addView(label(android.text.format.Formatter.formatShortFileSize(this, item.bytes), 13, true).apply { setPadding(0, 0, 0, dp(16)) })
+        fun menuRow(icon: Int, title: String, hint: String? = null, danger: Boolean = false, action: () -> Unit) {
+            val tint = if (danger) Color.rgb(255, 174, 157) else lime
+            val row = LinearLayout(this).apply {
+                gravity = android.view.Gravity.CENTER_VERTICAL
+                setPadding(dp(12), dp(12), dp(12), dp(12)); minimumHeight = dp(56)
+                background = RippleDrawable(ColorStateList.valueOf(Color.argb(35, 194, 255, 112)), null,
+                    GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(12).toFloat() })
+                isFocusable = true; setOnClickListener { dialog.dismiss(); action() }
+            }
+            row.addView(ImageView(this).apply { setImageResource(icon); imageTintList = ColorStateList.valueOf(tint) },
+                LinearLayout.LayoutParams(dp(24), dp(24)).apply { rightMargin = dp(16) })
+            row.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(label(title, 16).apply { setPadding(0, 0, 0, 0); if (danger) setTextColor(tint) })
+                if (hint != null) addView(label(hint, 12, true).apply { setPadding(0, dp(3), 0, 0) })
+            }, LinearLayout.LayoutParams(0, -2, 1f))
+            panel.addView(row)
+        }
+        menuRow(R.drawable.ic_open_outline, text("Открыть", "Open")) { access(item, false) }
+        menuRow(R.drawable.ic_share_outline, text("Поделиться", "Share")) { access(item, true) }
+        panel.addView(View(this).apply { setBackgroundColor(Color.rgb(49, 62, 49)) },
+            LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(8); bottomMargin = dp(8) })
+        menuRow(R.drawable.ic_delete_outline, text("Удалить файл", "Delete file"), text("С устройства и из списка загрузок", "From your device and downloads"), true) { confirmDelete(item) }
+        menuRow(R.drawable.ic_hide_outline, text("Убрать из списка", "Remove from list"), text("Файл останется на устройстве", "The file stays on your device")) { removeEntry(item) }
+        panel.addView(action(text("Закрыть", "Close")) { dialog.dismiss() }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(12) })
+        dialog.setContentView(ScrollView(this).apply { addView(panel) })
+        dialog.setOnDismissListener { fileMenu = null }
+        dialog.window?.apply {
+            setWindowAnimations(0); setBackgroundDrawableResource(android.R.color.transparent)
+            setGravity(android.view.Gravity.BOTTOM); setLayout(-1, -2)
+            addFlags(android.view.WindowManager.LayoutParams.FLAG_DIM_BEHIND); setDimAmount(.55f)
+        }
+        dialog.show()
+    }
+
+    private fun visibleItems(): List<SavedDownload> {
+        val items = history.list().filter { it.isAudio == music && it.title.contains(query.trim(), ignoreCase = true) }
+        val collator = java.text.Collator.getInstance(if (english) java.util.Locale.ENGLISH else java.util.Locale.forLanguageTag("ru"))
+        val comparator = when (sortOrder) {
+            1 -> compareBy<SavedDownload> { it.savedAt }
+            2 -> Comparator<SavedDownload> { first, second -> collator.compare(first.title, second.title) }
+            3 -> Comparator<SavedDownload> { first, second -> collator.compare(second.title, first.title) }
+            4 -> compareByDescending<SavedDownload> { it.bytes }
+            5 -> compareBy<SavedDownload> { it.bytes }
+            else -> compareByDescending<SavedDownload> { it.savedAt }
+        }
+        return items.sortedWith(comparator.thenBy { it.uri })
+    }
+    private fun sortLabels() = arrayOf(
+        text("Сначала новые", "Newest first"), text("Сначала старые", "Oldest first"),
+        text("Название: А–Я", "Name: A–Z"), text("Название: Я–А", "Name: Z–A"),
+        text("Сначала большие", "Largest first"), text("Сначала маленькие", "Smallest first"))
+
+    private fun showSortOptions() {
+        if (deleting || sortDialog?.isShowing == true) return
+        val labels = sortLabels()
+        val options = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_single_choice, labels) {
+            override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
+                return (super.getView(position, convertView, parent) as CheckedTextView).apply {
+                    setTextColor(if (position == sortOrder) lime else Color.WHITE)
+                    checkMarkTintList = ColorStateList.valueOf(lime)
+                    textSize = 16f; minHeight = dp(52)
+                }
+            }
+        }
+        val dialog = AlertDialog.Builder(this).setTitle(text("Сортировка загрузок", "Sort downloads"))
+            .setSingleChoiceItems(options, sortOrder) { picker, selected ->
+                picker.dismiss()
+                if (sortOrder != selected) {
+                    sortOrder = selected
+                    getPreferences(0).edit().putInt("sortOrder", selected).apply()
+                    renderItems()
+                }
+            }.setNegativeButton(text("Отмена", "Cancel"), null).create()
+        sortDialog = dialog
+        dialog.window?.apply {
+            setWindowAnimations(0)
+            setBackgroundDrawable(GradientDrawable().apply {
+                setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(20).toFloat()
+            })
+        }
+        dialog.setOnDismissListener { sortDialog = null }
+        dialog.show()
+        dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(lime)
+    }
 
     private fun rowBackground(selected: Boolean): RippleDrawable {
         val shape = GradientDrawable().apply {
@@ -677,5 +773,5 @@ class DownloadsActivity : Activity() {
         Toast.makeText(this, text("Файл недоступен: он мог быть удалён, перемещён или доступ отозван.",
             "File unavailable: it may have been moved, deleted, or access revoked."), Toast.LENGTH_LONG).show()
     }
-    override fun onDestroy() { worker.shutdownNow(); imageWorker.shutdownNow(); super.onDestroy() }
+    override fun onDestroy() { fileMenu?.dismiss(); sortDialog?.dismiss(); worker.shutdownNow(); imageWorker.shutdownNow(); super.onDestroy() }
 }

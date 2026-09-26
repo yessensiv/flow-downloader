@@ -39,6 +39,9 @@ class MainActivity : Activity() {
     private lateinit var advancedFields: LinearLayout
     private lateinit var advancedToggle: Button
     private var settingsDialog: android.app.Dialog? = null
+    private var appSettingsDialog: android.app.Dialog? = null
+    private var cancelDialog: android.app.Dialog? = null
+    private lateinit var settingsButton: ImageButton
     private var exportLanguage: Boolean? = null
     private lateinit var containerSpinner: Spinner
     private lateinit var containerLabel: TextView
@@ -74,6 +77,9 @@ class MainActivity : Activity() {
     private var choices = emptyList<Choice>()
     private var followingDownload = false
     private var pendingShare: String? = null
+    private var checkClipboardOnFocus = false
+    private var openedFromShare = false
+    private var clipboardOffer: AlertDialog? = null
     private val main = android.os.Handler(android.os.Looper.getMainLooper())
     private val downloadPoll = object : Runnable {
         override fun run() {
@@ -109,7 +115,13 @@ class MainActivity : Activity() {
         root.addView(LinearLayout(this).apply {
             gravity = android.view.Gravity.CENTER_VERTICAL
             addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
-            addView(language, LinearLayout.LayoutParams(dp(90), dp(44)))
+            settingsButton = ImageButton(this@MainActivity).apply {
+                setImageResource(R.drawable.ic_settings_outline)
+                setPadding(dp(12), dp(12), dp(12), dp(12))
+                background = surface()
+                setOnClickListener { showAppSettings() }
+            }
+            addView(settingsButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         })
         heading = label("", 24).apply { setPadding(0, dp(16), 0, dp(4)) }
         subtitle = label("", 14).apply { setTextColor(Color.rgb(170, 185, 169)); setPadding(0, 0, 0, dp(8)) }
@@ -281,14 +293,7 @@ class MainActivity : Activity() {
         progress.indeterminateTintList = ColorStateList.valueOf(lime)
         root.addView(progress)
         status = label("", 14).apply { setLineSpacing(dp(4).toFloat(), 1f) }
-        cancelDownload = button("") {
-            AlertDialog.Builder(this).setTitle(text("Отменить загрузку?", "Cancel download?"))
-                .setMessage(text("Текущий файл будет удалён из временных данных приложения.", "The in-progress file will be discarded."))
-                .setNegativeButton(text("Продолжить", "Keep downloading"), null)
-                .setPositiveButton(text("Отменить загрузку", "Cancel download")) { _, _ ->
-                    startService(Intent(this, DownloadService::class.java).setAction(DownloadService.CANCEL))
-                }.show()
-        }
+        cancelDownload = button("") { showCancelDownload() }
         style(cancelDownload, false)
         save = button("") {
             if (saved || busy) return@button
@@ -313,6 +318,13 @@ class MainActivity : Activity() {
         update = button("") { job(text("Обновляем обработчик…", "Updating engine…")) { engine.update(); runOnUiThread { media = null; title.text = ""; refreshChoices() } } }
         historyButton = button("") {
             startActivity(Intent(this, DownloadsActivity::class.java).putExtra("english", english))
+        }
+        root.removeView(update)
+        historyButton.apply {
+            gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
+            setPadding(dp(16), 0, dp(16), 0)
+            compoundDrawablePadding = dp(12)
+            setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_folder_outline, 0, 0, 0)
         }
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
@@ -371,6 +383,8 @@ class MainActivity : Activity() {
         button.alpha = if (button.isEnabled) 1f else .45f
     }
     private fun refresh() {
+        settingsButton.contentDescription = text("Настройки", "Settings")
+        settingsButton.isEnabled = !busy
         language.text = if (english) "EN · RU" else "RU · EN"
         heading.text = text("Любимое — с собой.", "Keep what you love.")
         subtitle.text = text("Видео и музыка прямо на телефоне.", "Video and music, right on your phone.")
@@ -386,6 +400,7 @@ class MainActivity : Activity() {
         historyButton.text = text("Мои загрузки", "My downloads")
         style(historyButton, false)
         listOf(mode, audioMode, input, analyze, update).forEach { it.isEnabled = !busy }
+        analyze.isEnabled = !busy && input.text.isNotBlank()
         spinner.isEnabled = !busy && choices.isNotEmpty()
         refreshExportOptions()
         download.isEnabled = !busy && choices.isNotEmpty()
@@ -401,11 +416,125 @@ class MainActivity : Activity() {
         cancelDownload.text = text("✕  Отменить загрузку", "✕  Cancel download")
         cancelDownload.visibility = if (busy && DownloadService.state?.running == true && DownloadService.state?.saving != true) View.VISIBLE else View.GONE
         details.text = text("Подробности ошибки", "Error details")
-        details.visibility = if (lastError.isNotEmpty()) View.VISIBLE else View.GONE
+        details.visibility = if (lastError.isNotEmpty() && lastError != DownloadService.CANCELLED) View.VISIBLE else View.GONE
         style(language, false); style(mode, !audio); style(audioMode, audio)
-        style(analyze, false); style(download, true); style(save, true); style(update, false); style(details, false)
+        style(analyze, analyze.isEnabled); style(download, true); style(save, true); style(update, false); style(details, false)
+        listOf(mode, audioMode).forEach { tab ->
+            val selected = (tab === audioMode) == audio
+            tab.background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(Color.argb(35, 255, 255, 255)),
+                GradientDrawable().apply { setColor(if (selected) lime else Color.TRANSPARENT); cornerRadius = dp(13).toFloat() }, null)
+        }
         if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("✓ Сохранено в ${if (audio) "Music/Flow" else "Movies/Flow"}.", "✓ Saved to ${if (audio) "Music/Flow" else "Movies/Flow"}.") else if (ready != null) text("Готово! Сохраните файл на устройстве.", "Ready! Save the file to your device.") else text("Без сервера · Загрузка работает в фоне\nВ YouTube нажмите «Поделиться» → Flow.", "No server · Downloads work in the background\nIn YouTube, tap Share → Flow.")
-        status.setTextColor(if (lastError.isNotEmpty()) Color.rgb(255, 171, 151) else Color.rgb(175, 190, 174))
+        status.setTextColor(if (lastError.isNotEmpty() && lastError != DownloadService.CANCELLED) Color.rgb(255, 171, 151) else Color.rgb(175, 190, 174))
+        if (!busy && lastError.isEmpty() && !saved && ready == null) {
+            status.text = text("Вставьте ссылку или поделитесь видео из YouTube.", "Paste a link or share a video from YouTube.")
+        }
+    }
+    private fun showCancelDownload() {
+        if (cancelDialog?.isShowing == true) return
+        val dialog = android.app.Dialog(this)
+        cancelDialog = dialog
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(24), dp(24), dp(24), dp(24))
+            background = surface(Color.rgb(24, 32, 25))
+        }
+        panel.addView(TextView(this).apply {
+            text = text("Остановить загрузку?", "Stop downloading?")
+            textSize = 22f; setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD)
+        })
+        panel.addView(TextView(this).apply {
+            text = text("Незавершённый файл будет удалён. Загрузку можно начать заново.", "The unfinished file will be removed. You can start the download again.")
+            textSize = 15f; setTextColor(Color.rgb(175, 190, 174)); setLineSpacing(dp(3).toFloat(), 1f)
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(24) })
+        panel.addView(Button(this).apply {
+            text = text("Продолжить загрузку", "Keep downloading")
+            textSize = 16f; isAllCaps = false; style(this, true)
+            setOnClickListener { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(-1, dp(52)))
+        panel.addView(Button(this).apply {
+            text = text("Остановить", "Stop download")
+            textSize = 16f; isAllCaps = false; style(this, false)
+            setTextColor(Color.rgb(255, 174, 157))
+            setOnClickListener {
+                val current = DownloadService.state
+                if (current?.running == true && !current.saving)
+                    startService(Intent(this@MainActivity, DownloadService::class.java).setAction(DownloadService.CANCEL))
+                dialog.dismiss()
+            }
+        }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(10) })
+        dialog.setContentView(ScrollView(this).apply { addView(panel) })
+        dialog.setOnDismissListener { cancelDialog = null }
+        dialog.window?.apply {
+            setWindowAnimations(0)
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setLayout((resources.displayMetrics.widthPixels - dp(40)).coerceAtLeast(dp(240)), -2)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND); setDimAmount(.55f)
+        }
+        dialog.show()
+    }
+
+    private fun showAppSettings() {
+        if (busy) return
+        appSettingsDialog?.dismiss()
+        val dialog = android.app.Dialog(this)
+        appSettingsDialog = dialog
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            background = surface()
+            setPadding(dp(20), dp(20), dp(20), dp(24))
+        }
+        fun caption(value: String, size: Int, muted: Boolean = false) = TextView(this).apply {
+            text = value; textSize = size.toFloat()
+            setTextColor(if (muted) Color.rgb(175, 190, 174) else Color.WHITE)
+        }
+        val heading = caption("", 22).apply { setTypeface(null, Typeface.BOLD) }
+        panel.addView(heading)
+        val languageLabel = caption("", 14, true)
+        panel.addView(languageLabel, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(24); bottomMargin = dp(10) })
+        val languages = LinearLayout(this)
+        val russian = Button(this).apply { text = "Русский"; isAllCaps = false; textSize = 15f }
+        val englishButton = Button(this).apply { text = "English"; isAllCaps = false; textSize = 15f }
+        languages.addView(russian, LinearLayout.LayoutParams(0, dp(48), 1f))
+        languages.addView(englishButton, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(8) })
+        panel.addView(languages)
+        val updateAction = Button(this).apply {
+            isAllCaps = false; textSize = 16f
+            gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
+            setPadding(dp(16), dp(12), dp(16), dp(12))
+            setOnClickListener { dialog.dismiss(); update.performClick() }
+        }
+        panel.addView(updateAction, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20); bottomMargin = dp(20) })
+        val done = Button(this).apply { isAllCaps = false; textSize = 16f; setOnClickListener { dialog.dismiss() } }
+        panel.addView(done, LinearLayout.LayoutParams(-1, dp(48)))
+        fun refreshPanel() {
+            heading.text = text("Настройки", "Settings")
+            languageLabel.text = text("Язык приложения", "App language")
+            style(russian, !english); style(englishButton, english)
+            updateAction.text = optionCaption(text("Обновить движок YouTube", "Update YouTube engine"),
+                text("Может помочь при ошибках скачивания", "May help with download errors"))
+            style(updateAction, false)
+            done.text = text("Готово", "Done"); style(done, true)
+        }
+        fun setLanguage(value: Boolean) {
+            english = value
+            getPreferences(0).edit().putBoolean("english", english).apply()
+            refresh(); refreshPanel()
+        }
+        russian.setOnClickListener { setLanguage(false) }
+        englishButton.setOnClickListener { setLanguage(true) }
+        refreshPanel()
+        dialog.setContentView(ScrollView(this).apply { addView(panel) })
+        dialog.setOnDismissListener { if (appSettingsDialog === dialog) appSettingsDialog = null }
+        dialog.window?.apply {
+            setWindowAnimations(0)
+            setBackgroundDrawableResource(android.R.color.transparent)
+            setGravity(android.view.Gravity.BOTTOM)
+            setLayout(-1, -2)
+            addFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+            setDimAmount(.55f)
+        }
+        dialog.show()
     }
     private fun friendlyError(error: String): String = when {
         error == "URL" -> text("Вставьте корректную ссылку YouTube.", "Paste a valid YouTube link.")
@@ -487,17 +616,24 @@ class MainActivity : Activity() {
                 }
                 .setNegativeButton(text("Отмена", "Cancel"), null)
                 .create()
-            picker.setOnShowListener {
-                picker.window?.setBackgroundDrawable(surface(Color.rgb(22, 30, 23)))
-                picker.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(lime)
+            picker.window?.apply {
+                setWindowAnimations(0)
+                setBackgroundDrawable(surface(Color.rgb(22, 30, 23)))
             }
             picker.show()
+            picker.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(lime)
             return true
         }
     }
 
     private fun showExportSettings() {
         if (busy || choices.isEmpty()) return
+        val originalChoice = spinner.selectedItemPosition
+        val originalContainer = containerSpinner.selectedItemPosition
+        val originalBitrate = bitrateSpinner.selectedItemPosition
+        val originalMetadata = embedMetadata.isChecked
+        val originalCover = embedCover.isChecked
+        var confirmed = false
         (exportFields.parent as? android.view.ViewGroup)?.removeView(exportFields)
         val dialog = android.app.Dialog(this)
         settingsDialog = dialog
@@ -509,24 +645,39 @@ class MainActivity : Activity() {
                 setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD); setPadding(0, 0, 0, dp(16))
             })
             addView(exportFields)
-            addView(Button(this@MainActivity).apply {
-                text = text("Готово", "Done"); isAllCaps = false; style(this, true)
+            val actions = LinearLayout(this@MainActivity)
+            actions.addView(Button(this@MainActivity).apply {
+                text = text("Отмена", "Cancel"); isAllCaps = false; style(this, false)
                 setOnClickListener { dialog.dismiss() }
-            }, LinearLayout.LayoutParams(-1, dp(48)).apply { topMargin = dp(12) })
+            }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
+            actions.addView(Button(this@MainActivity).apply {
+                text = text("Готово", "Done"); isAllCaps = false; style(this, true)
+                setOnClickListener { confirmed = true; dialog.dismiss() }
+            }, LinearLayout.LayoutParams(0, dp(48), 1f))
+            addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
         }
         dialog.setContentView(ScrollView(this).apply { addView(panel) })
         dialog.setOnDismissListener {
+            if (!confirmed) {
+                spinner.setSelection(originalChoice)
+                containerSpinner.setSelection(originalContainer)
+                bitrateSpinner.setSelection(originalBitrate)
+                embedMetadata.isChecked = originalMetadata
+                embedCover.isChecked = originalCover
+                refreshExportOptions()
+            }
             (exportFields.parent as? android.view.ViewGroup)?.removeView(exportFields)
             settingsDialog = null
         }
-        dialog.show()
         dialog.window?.apply {
+            setWindowAnimations(0)
             setBackgroundDrawableResource(android.R.color.transparent)
             setGravity(android.view.Gravity.BOTTOM)
             setLayout(-1, -2)
             attributes = attributes.apply { height = (resources.displayMetrics.heightPixels * .75f).toInt() }
         }
         refreshExportOptions()
+        dialog.show()
     }
 
     private fun optionCaption(title: String, subtitle: String): CharSequence = android.text.SpannableString("$title\n$subtitle").apply {
@@ -697,9 +848,48 @@ class MainActivity : Activity() {
     }
     override fun onStart() {
         super.onStart()
+        checkClipboardOnFocus = !openedFromShare
         main.post(downloadPoll)
     }
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && checkClipboardOnFocus && ::input.isInitialized) {
+            checkClipboardOnFocus = false
+            offerClipboardLink()
+        }
+    }
+    private fun offerClipboardLink() {
+        if (busy || followingDownload || pendingShare != null || clipboardOffer != null) return
+        val clipboard = getSystemService(android.content.ClipboardManager::class.java)
+        val raw = runCatching { clipboard.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.take(8192)?.toString() }.getOrNull() ?: return
+        val url = Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE).findAll(raw)
+            .mapNotNull { runCatching { engine.canonicalUrl(it.value.trimEnd('.', ',', ')', ']')) }.getOrNull() }.firstOrNull() ?: return
+        val prefs = getPreferences(0)
+        if (prefs.getString("lastClipboardUrl", null) == url) return
+        prefs.edit().putString("lastClipboardUrl", url).apply()
+        if (runCatching { engine.canonicalUrl(input.text.toString()) }.getOrNull() == url) return
+        fun useLink() {
+            if (busy || isFinishing || isDestroyed) return
+            input.setText(url)
+            input.setSelection(0)
+            analyze.performClick()
+        }
+        if (input.text.isBlank() && ready == null && media == null) {
+            useLink()
+        } else {
+            clipboardOffer = AlertDialog.Builder(this)
+                .setTitle(text("Новая ссылка из буфера", "New link from clipboard"))
+                .setMessage(text("Открыть эту ссылку и показать варианты скачивания?", "Open this link and show download options?") + "\n\n" + url)
+                .setPositiveButton(text("Открыть", "Open")) { _, _ -> useLink() }
+                .setNegativeButton(text("Не сейчас", "Not now"), null)
+                .create().apply {
+                    setOnDismissListener { clipboardOffer = null }
+                    show()
+                }
+        }
+    }
     override fun onStop() {
+        openedFromShare = false
         main.removeCallbacks(downloadPoll)
         super.onStop()
     }
@@ -710,6 +900,8 @@ class MainActivity : Activity() {
     }
     private fun handleShare(incoming: Intent?) {
         if (incoming?.action != Intent.ACTION_SEND || incoming.type != "text/plain") return
+        openedFromShare = true
+        checkClipboardOnFocus = false
         val shared = incoming.getStringExtra(Intent.EXTRA_TEXT).orEmpty().take(8192)
         val url = Regex("https?://[^\\s<>]+", RegexOption.IGNORE_CASE).findAll(shared)
             .mapNotNull { runCatching { engine.canonicalUrl(it.value.trimEnd('.', ',', ')', ']')) }.getOrNull() }.firstOrNull()
@@ -783,6 +975,9 @@ class MainActivity : Activity() {
         setOnClickListener { action() }
     }
     override fun onDestroy() {
+        cancelDialog?.dismiss()
+        appSettingsDialog?.dismiss()
+        clipboardOffer?.dismiss()
         settingsDialog?.dismiss()
         super.onDestroy()
         worker.shutdownNow()

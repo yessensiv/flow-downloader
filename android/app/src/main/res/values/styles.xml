@@ -1,0 +1,22 @@
+<resources>
+    <style name="FlowTheme" parent="android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#C2FF70</item>
+        <item name="android:alertDialogTheme">@style/FlowDialogTheme</item>
+    </style>
+    <style name="FlowDialogTheme" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:windowBackground">@drawable/dialog_surface</item>
+        <item name="android:colorAccent">#C2FF70</item>
+        <item name="android:colorBackground">#182019</item>
+        <item name="android:textColorPrimary">#EBF1E8</item>
+        <item name="android:textColorSecondary">#AFBEAE</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimAmount">0.55</item>
+        <item name="android:buttonBarButtonStyle">@style/FlowDialogButton</item>
+    </style>
+    <style name="FlowDialogButton" parent="android:style/Widget.Material.Button.Borderless">
+        <item name="android:textAllCaps">false</item>
+        <item name="android:textColor">#C2FF70</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:minHeight">48dp</item>
+    </style>
+</resources>
