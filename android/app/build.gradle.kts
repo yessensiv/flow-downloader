@@ -19,6 +19,15 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
     kotlinOptions { jvmTarget = "17" }
+    // Trusted Actions builds reuse the existing key so APK updates keep user data.
+    System.getenv("FLOW_SIGNING_STORE_FILE")?.let { signingStore ->
+        signingConfigs.getByName("debug") {
+            storeFile = file(signingStore)
+            storePassword = "android"
+            keyAlias = "AndroidDebugKey"
+            keyPassword = "android"
+        }
+    }
     packaging { jniLibs.useLegacyPackaging = true }
 }
 dependencies {

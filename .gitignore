@@ -7,3 +7,5 @@ out/
 next-env.d.ts
 .tools/
 .downloads/
+*.keystore
+*.jks

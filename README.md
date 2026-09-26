@@ -130,6 +130,23 @@ Unlike Android, the web version keeps prepared files on its server for **5 minut
 
 ## Development
 
+### Automatic Android builds
+
+[![Android build](https://github.com/yessensiv/flow-downloader/actions/workflows/android.yml/badge.svg)](https://github.com/yessensiv/flow-downloader/actions/workflows/android.yml)
+
+GitHub Actions builds Android changes pushed to `main` and pull requests. It compiles the app and device tests, runs lint and any JVM unit tests, and keeps a downloadable APK artifact for 14 days. Device tests are compiled, not executed by this workflow. You can also start a build from **Actions → Android → Run workflow**.
+
+To publish a new version, first update `versionName` and increment `versionCode` in `android/app/build.gradle.kts`, commit and push. Then push a matching tag (for example, `v0.21.0` after setting versionName to `0.21.0`):
+
+```sh
+git tag v0.21.0
+git push origin v0.21.0
+```
+
+The tag triggers a build and publishes `Flow.apk` and its SHA-256 checksum to Releases. The README download button then points to the new release. Existing published releases are never replaced automatically.
+
+Trusted builds use the existing development signing key from the encrypted `FLOW_DEBUG_KEYSTORE_BASE64` repository secret, so users can install updates over earlier Flow builds. Pull requests never receive this key and use a temporary debug signature; their APKs are for testing only. Fork maintainers must provide their own signing secret for branch/tag builds. These remain development builds, not Google Play releases.
+
 | Command | Purpose |
 | --- | --- |
 | `npm run dev` | Start the local web development server. |
