@@ -175,6 +175,10 @@ class MainActivity : Activity() {
             val mime = when (file.extension) { "mp3" -> "audio/mpeg"; "m4a" -> "audio/mp4"; "mkv" -> "video/x-matroska"; "mp4" -> "video/mp4"; "webm" -> if (audio) "audio/webm" else "video/webm"; else -> "application/octet-stream" }
             exportTitle = media?.title ?: "Flow"
             exportMime = mime
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                saveToMediaStore(file, exportTitle, mime)
+                return@button
+            }
             startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE); type = mime
                 putExtra(Intent.EXTRA_TITLE, "${media?.title?.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_")?.take(100) ?: "Flow"}.${file.extension}")
@@ -254,7 +258,7 @@ class MainActivity : Activity() {
         input.hint = text("Вставьте ссылку YouTube", "Paste a YouTube link")
         analyze.text = text("Показать варианты", "Show options")
         download.text = text("↓  Подготовить файл", "↓  Prepare download")
-        save.text = text("Сохранить файл…", "Save file…")
+        save.text = text("Сохранить в папку Flow", "Save to Flow folder")
         update.text = text("↻  Обновить движок", "↻  Update engine")
         historyButton.text = text("Мои загрузки", "My downloads")
         style(historyButton, false)
@@ -273,7 +277,7 @@ class MainActivity : Activity() {
         details.visibility = if (lastError.isNotEmpty()) View.VISIBLE else View.GONE
         style(language, false); style(mode, !audio); style(audioMode, audio)
         style(analyze, media == null); style(download, true); style(save, true); style(update, false); style(details, false)
-        if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("✓ Файл сохранён в выбранную папку.", "✓ File saved to your chosen folder.") else if (ready != null) text("Готово! Выберите, куда сохранить файл.", "Ready! Choose where to save your file.") else text("Без сервера · Загрузка работает в фоне\nВ YouTube нажмите «Поделиться» → Flow.", "No server · Downloads work in the background\nIn YouTube, tap Share → Flow.")
+        if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("✓ Сохранено в ${if (audio) "Music/Flow" else "Movies/Flow"}.", "✓ Saved to ${if (audio) "Music/Flow" else "Movies/Flow"}.") else if (ready != null) text("Готово! Сохраните файл на устройстве.", "Ready! Save the file to your device.") else text("Без сервера · Загрузка работает в фоне\nВ YouTube нажмите «Поделиться» → Flow.", "No server · Downloads work in the background\nIn YouTube, tap Share → Flow.")
         status.setTextColor(if (lastError.isNotEmpty()) Color.rgb(255, 171, 151) else Color.rgb(175, 190, 174))
     }
     private fun friendlyError(error: String): String = when {
@@ -374,6 +378,40 @@ class MainActivity : Activity() {
         refresh()
         if (busy) status.text = text("Загрузка в фоне", "Downloading in background") + if (current.progress >= 0) " · ${current.progress}%" else "…"
         else { followingDownload = false; offerPendingShare() }
+    }
+    private fun saveToMediaStore(file: File, rawTitle: String, mime: String) {
+        if (busy) return
+        busy = true; saved = false; lastError = ""; refresh()
+        status.text = text("Сохраняем в папку устройства…", "Saving to your device folders…")
+        val safeTitle = rawTitle.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").trim().take(100).ifBlank { "Flow" }
+        val extension = file.extension.lowercase()
+        val collection = if (mime.startsWith("audio/")) android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            else android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        val relativePath = if (mime.startsWith("audio/")) "Music/Flow" else "Movies/Flow"
+        worker.execute {
+            var uri: android.net.Uri? = null
+            try {
+                val values = android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "$safeTitle.$extension")
+                    put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
+                    put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                uri = contentResolver.insert(collection, values) ?: error("Could not create media entry")
+                contentResolver.openOutputStream(uri!!, "w")?.use { output -> file.inputStream().use { it.copyTo(output) } }
+                    ?: error("Could not open media destination")
+                check(contentResolver.update(uri!!, android.content.ContentValues().apply {
+                    put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
+                }, null, null) == 1) { "Could not finish media file" }
+                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), safeTitle, mime, file.length(), System.currentTimeMillis()))
+                runOnUiThread { if (!isDestroyed) saved = true }
+            } catch (e: Exception) {
+                uri?.let { runCatching { contentResolver.delete(it, null, null) } }
+                runOnUiThread { if (!isDestroyed) lastError = e.message ?: "Save failed" }
+            } finally {
+                runOnUiThread { if (!isDestroyed) { busy = false; refresh() } }
+            }
+        }
     }
     override fun onStart() {
         super.onStart()

@@ -106,7 +106,7 @@ class DownloadsActivity : Activity() {
             actions.addView(action(text("Поделиться", "Share")) { access(item, true) }, LinearLayout.LayoutParams(0, dp(48), 1f))
             actions.addView(action("⋮") {
                 AlertDialog.Builder(this).setTitle(item.title)
-                    .setItems(arrayOf(text("Удалить файл и запись", "Delete file and entry"), text("Только убрать из истории", "Remove entry only"))) { _, which ->
+                    .setItems(arrayOf(text("Удалить файл с устройства…", "Delete file from device…"), text("Убрать только запись (файл останется)", "Remove history only (keep file)"))) { _, which ->
                         if (which == 0) confirmDelete(item) else removeEntry(item)
                     }.show()
             }.apply { contentDescription = text("Действия с файлом", "File actions"); isEnabled = !deleting }, LinearLayout.LayoutParams(dp(48), dp(48)))
@@ -136,7 +136,9 @@ class DownloadsActivity : Activity() {
     private fun deleteFile(item: SavedDownload) {
         if (deleting) return
         if (android.os.Build.VERSION.SDK_INT >= 30) {
-            val mediaUri = runCatching { android.provider.MediaStore.getMediaUri(this, Uri.parse(item.uri)) }.getOrNull()
+            val savedUri = Uri.parse(item.uri)
+            val mediaUri = if (savedUri.authority == android.provider.MediaStore.AUTHORITY) savedUri
+                else runCatching { android.provider.MediaStore.getMediaUri(this, savedUri) }.getOrNull()
             if (mediaUri != null) {
                 pendingDeletion = item
                 try {
