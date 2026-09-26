@@ -4,6 +4,8 @@
   <p><strong>Твои видео. Твоя музыка. С собой.</strong></p>
   <p>Загрузчик видео и аудио с YouTube для Android.</p>
   <p><a href="README.md">English</a> &nbsp;|&nbsp; <strong>Русский</strong></p>
+  <p><a href="https://github.com/yessensiv/flow-downloader/releases/latest/download/Flow.apk"><img src="https://img.shields.io/badge/Скачать_APK-Android-C2FF70?style=for-the-badge&amp;logo=android&amp;logoColor=0F1410&amp;labelColor=0F1410" alt="Скачать APK для Android"></a></p>
+  <p><a href="https://github.com/yessensiv/flow-downloader/releases/latest">Что нового</a> · Android 8.0+ · Debug-сборка</p>
   <p>Android 8.0+ · Kotlin · Русский и английский · Без сервера</p>
   <p><a href="#начало-работы">Начало работы</a> · <a href="#возможности">Возможности</a> · <a href="#сборка-android-приложения">Сборка</a> · <a href="#локальная-веб-версия">Веб-версия</a></p>
 </div>
@@ -29,9 +31,9 @@ Flow подготавливает видео и аудио прямо на те�
 
 ## Начало работы
 
-Текущая версия проекта — **0.19.0**. Инструкции ниже позволяют получить **debug APK** для установки на телефон.
+Текущая версия проекта — **0.19.0**. Открой эту страницу на телефоне, нажми **[Скачать APK](https://github.com/yessensiv/flow-downloader/releases/latest/download/Flow.apk)** и открой загруженный файл. Если Android попросит, разреши установку из браузера. Это debug-сборка; для её установки не нужны компьютер и инструменты разработки.
 
-1. Собери APK через [Android Studio или скрипты Windows](#сборка-android-приложения).
+1. Скачай APK кнопкой выше или собери его через [Android Studio или скрипты Windows](#сборка-android-приложения).
 2. Скопируй APK на телефон и открой его. Если Android попросит, разреши установку из этого источника. Также можно установить приложение по USB — инструкция ниже.
 3. Открой Flow и вставь ссылку либо выбери **YouTube → Поделиться → Flow**.
 4. Выбери **Видео** или **Аудио**, нажми **Показать варианты**, затем выбери качество или формат.

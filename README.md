@@ -4,6 +4,8 @@
   <p><strong>Your videos. Your music. To go.</strong></p>
   <p>A YouTube video and audio downloader for Android.</p>
   <p><strong>English</strong> &nbsp;|&nbsp; <a href="README.ru.md">Русский</a></p>
+  <p><a href="https://github.com/yessensiv/flow-downloader/releases/latest/download/Flow.apk"><img src="https://img.shields.io/badge/Download_APK-Android-C2FF70?style=for-the-badge&amp;logo=android&amp;logoColor=0F1410&amp;labelColor=0F1410" alt="Download APK for Android"></a></p>
+  <p><a href="https://github.com/yessensiv/flow-downloader/releases/latest">Release notes</a> · Android 8.0+ · Debug build</p>
   <p>Android 8.0+ · Kotlin · English & Russian · No server required</p>
   <p><a href="#get-started">Get started</a> · <a href="#features">Features</a> · <a href="#build-the-android-app">Build</a> · <a href="#local-web-version">Web version</a></p>
 </div>
@@ -29,9 +31,9 @@ Flow prepares video and audio directly on your phone and keeps your saved files 
 
 ## Get started
 
-The current project version is **0.19.0**. The instructions below produce a **debug APK** for installation on your phone.
+The current project version is **0.19.0**. On your phone, tap **[Download APK](https://github.com/yessensiv/flow-downloader/releases/latest/download/Flow.apk)** and open the downloaded file. Allow installation from your browser if Android asks. This is a debug build; no computer or build tools are needed to install it.
 
-1. Build the APK using [Android Studio or the Windows scripts](#build-the-android-app).
+1. Download the APK using the button above, or build it using [Android Studio or the Windows scripts](#build-the-android-app).
 2. Copy the APK to your phone and open it. Allow installation from that source if Android asks, or install through USB as described below.
 3. Open Flow and paste a link, or use **YouTube → Share → Flow**.
 4. Choose **Video** or **Audio**, tap **Show options**, then choose a quality or format.
