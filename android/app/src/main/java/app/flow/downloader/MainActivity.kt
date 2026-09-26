@@ -32,6 +32,9 @@ class MainActivity : Activity() {
     private lateinit var download: Button
     private lateinit var save: Button
     private lateinit var language: Button
+    private lateinit var historyButton: Button
+    private var exportTitle = "Flow"
+    private var exportMime = "application/octet-stream"
     private lateinit var mode: Button
     private lateinit var audioMode: Button
     private lateinit var subtitle: TextView
@@ -168,6 +171,8 @@ class MainActivity : Activity() {
         save = button("") {
             val file = ready ?: return@button
             val mime = when (file.extension) { "mp3" -> "audio/mpeg"; "m4a" -> "audio/mp4"; "mkv" -> "video/x-matroska"; "mp4" -> "video/mp4"; "webm" -> if (audio) "audio/webm" else "video/webm"; else -> "application/octet-stream" }
+            exportTitle = media?.title ?: "Flow"
+            exportMime = mime
             startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE); type = mime
                 putExtra(Intent.EXTRA_TITLE, "${media?.title?.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_")?.take(100) ?: "Flow"}.${file.extension}")
@@ -178,6 +183,9 @@ class MainActivity : Activity() {
                 .setMessage(lastError.takeLast(4000)).setPositiveButton("OK", null).show()
         }
         update = button("") { job(text("Обновляем обработчик…", "Updating engine…")) { engine.update(); runOnUiThread { media = null; title.text = ""; refreshChoices() } } }
+        historyButton = button("") {
+            startActivity(Intent(this, DownloadsActivity::class.java).putExtra("english", english))
+        }
         input.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
@@ -221,6 +229,8 @@ class MainActivity : Activity() {
         download.text = text("↓  Подготовить файл", "↓  Prepare download")
         save.text = text("Сохранить файл…", "Save file…")
         update.text = text("↻  Обновить движок", "↻  Update engine")
+        historyButton.text = text("Мои загрузки", "My downloads")
+        style(historyButton, false)
         listOf(mode, audioMode, input, analyze, update).forEach { it.isEnabled = !busy }
         spinner.isEnabled = !busy
         download.isEnabled = !busy && choices.isNotEmpty()
@@ -380,9 +390,25 @@ class MainActivity : Activity() {
         if (requestCode != 1 || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         val file = ready ?: return
+        val savedTitle = exportTitle
+        val savedMime = exportMime
+        val permissionFlags = (data.flags and (Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION))
         job(text("Сохраняем…", "Saving…")) {
             contentResolver.openOutputStream(uri)?.use { output -> file.inputStream().use { it.copyTo(output) } } ?: error("Cannot open destination")
-            runOnUiThread { saved = true }
+            // Some document providers do not support persistent grants; the file is still saved.
+            val retained = runCatching {
+                require(permissionFlags and Intent.FLAG_GRANT_READ_URI_PERMISSION != 0)
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }.isSuccess
+            val recorded = runCatching {
+                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), savedTitle, savedMime, file.length(), System.currentTimeMillis()))
+            }.isSuccess
+            runOnUiThread {
+                saved = true
+                if (!retained || !recorded) Toast.makeText(this,
+                    text("Файл сохранён. Постоянный доступ через историю недоступен; откройте файл из выбранной папки.",
+                        "File saved. Persistent history access is unavailable; open it from your chosen folder."), Toast.LENGTH_LONG).show()
+            }
         }
     }
     private fun label(value: String, size: Int) = TextView(this).apply {
