@@ -1,6 +1,7 @@
 package app.flow.downloader
 
 import android.content.Context
+import android.media.MediaCodecList
 import android.net.Uri
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
@@ -9,7 +10,8 @@ import org.json.JSONObject
 import java.io.File
 
 data class Choice(val selector: String, val label: String, val audio: Boolean, val mp3: Boolean = false, val extractAudio: Boolean = false,
-    val format: String = "", val bitrate: Int = 192, val metadata: Boolean = false, val cover: Boolean = false)
+    val format: String = "", val bitrate: Int = 192, val metadata: Boolean = false, val cover: Boolean = false,
+    val deviceCompatible: Boolean = true)
 data class Media(val url: String, val title: String, val choices: List<Choice>, val thumbnail: String = "")
 
 class MediaEngine(private val context: Context) {
@@ -73,7 +75,8 @@ class MediaEngine(private val context: Context) {
                 val separate = row.optString("acodec", "none") == "none"
                 if (separate && track == null) null else Choice(
                     row.getString("format_id") + if (separate) "+${track!!.getString("format_id")}" else "",
-                    "${row.optInt("height")}p · ${row.optDouble("fps", 0.0).toInt()} fps", false)
+                    "${row.optInt("height")}p · ${row.optDouble("fps", 0.0).toInt()} fps", false,
+                    deviceCompatible = supportsVideo(row.optString("vcodec"), row.optInt("width"), row.optInt("height"), row.optDouble("fps", 30.0)))
             }.toMutableList()
         audioSources.maxByOrNull { it.optDouble("abr", it.optDouble("tbr", 0.0)) }?.let { track ->
             val audioLabel = if (extractAudio) "M4A · только звук" else track.optString("ext").uppercase() + " · original"
@@ -84,6 +87,27 @@ class MediaEngine(private val context: Context) {
         }
         require(choices.isNotEmpty()) { "EMPTY" }
         return Media(url, json.optString("title", "YouTube"), choices, json.optString("thumbnail"))
+    }
+
+    private fun supportsVideo(codec: String, width: Int, height: Int, fps: Double): Boolean {
+        if (width <= 0 || height <= 0) return false
+        val mime = when {
+            codec.startsWith("avc1", true) || codec.contains("h264", true) -> "video/avc"
+            codec.startsWith("hev1", true) || codec.startsWith("hvc1", true) || codec.contains("hevc", true) -> "video/hevc"
+            codec.startsWith("vp9", true) || codec.startsWith("vp09", true) -> "video/x-vnd.on2.vp9"
+            codec.startsWith("av01", true) || codec.contains("av1", true) -> "video/av01"
+            codec.startsWith("vp8", true) || codec.startsWith("vp08", true) -> "video/x-vnd.on2.vp8"
+            else -> return false
+        }
+        return runCatching {
+            MediaCodecList(MediaCodecList.REGULAR_CODECS).codecInfos
+                .asSequence().filterNot { it.isEncoder }
+                .flatMap { info -> info.supportedTypes.asSequence().filter { it.equals(mime, true) }.map { info } }
+                .any { info ->
+                    val caps = info.getCapabilitiesForType(mime).videoCapabilities ?: return@any false
+                    caps.areSizeAndRateSupported(width, height, fps.coerceAtLeast(1.0))
+                }
+        }.getOrDefault(false)
     }
     fun download(media: Media, choice: Choice, progress: (Float, Long, String) -> Unit): File {
         ensureCurrent()
@@ -110,6 +134,9 @@ class MediaEngine(private val context: Context) {
     internal fun exportRequest(media: Media, choice: Choice, dir: File): YoutubeDLRequest = request(media.url).apply {
                 addOption("-f", choice.selector)
                 addOption("-o", File(dir, "flow.%(ext)s").absolutePath)
+                // Downloads live in an isolated temporary directory, cleaned up on failure.
+                // Avoid the final .part rename by writing directly to the temporary output.
+                addOption("--no-part")
                 addOption("--max-filesize", "2G")
                 if (!choice.audio) {
                     val container = choice.format.ifBlank { "mkv" }

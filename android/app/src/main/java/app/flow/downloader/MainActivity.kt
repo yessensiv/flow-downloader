@@ -498,6 +498,32 @@ class MainActivity : Activity() {
         languages.addView(russian, LinearLayout.LayoutParams(0, dp(48), 1f))
         languages.addView(englishButton, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(8) })
         panel.addView(languages)
+        val qualityCard = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            background = GradientDrawable().apply {
+                setColor(Color.rgb(24, 31, 25)); setStroke(dp(1), Color.rgb(54, 66, 54)); cornerRadius = dp(16).toFloat()
+            }
+            setPadding(dp(16), dp(14), dp(12), dp(14))
+        }
+        val qualityText = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val qualityTitle = caption("", 15)
+        val qualityDescription = caption("", 12, true).apply { setLineSpacing(dp(2).toFloat(), 1f) }
+        qualityText.addView(qualityTitle)
+        qualityText.addView(qualityDescription, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(3) })
+        qualityCard.addView(qualityText, LinearLayout.LayoutParams(0, -2, 1f))
+        val allQualities = Switch(this).apply {
+            isChecked = getPreferences(0).getBoolean("allQualities", false)
+            buttonTintList = ColorStateList(
+                arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
+                intArrayOf(lime, Color.rgb(142, 153, 143)))
+            setOnCheckedChangeListener { _, checked ->
+                getPreferences(0).edit().putBoolean("allQualities", checked).apply()
+                refreshChoices()
+            }
+        }
+        qualityCard.addView(allQualities, LinearLayout.LayoutParams(-2, -2).apply { leftMargin = dp(8) })
+        panel.addView(qualityCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
         val updateAction = Button(this).apply {
             isAllCaps = false; textSize = 16f
             gravity = android.view.Gravity.START or android.view.Gravity.CENTER_VERTICAL
@@ -510,6 +536,8 @@ class MainActivity : Activity() {
         fun refreshPanel() {
             heading.text = text("Настройки", "Settings")
             languageLabel.text = text("Язык приложения", "App language")
+            qualityTitle.text = text("Показывать все качества", "Show all qualities")
+            qualityDescription.text = text("Включая форматы, которые телефон может не воспроизвести", "Also show formats your phone may not play")
             style(russian, !english); style(englishButton, english)
             updateAction.text = optionCaption(text("Обновить движок YouTube", "Update YouTube engine"),
                 text("Может помочь при ошибках скачивания", "May help with download errors"))
@@ -697,7 +725,8 @@ class MainActivity : Activity() {
     }
 
     private fun refreshChoices() {
-        choices = media?.choices?.filter { it.audio == audio } ?: emptyList()
+        val showAll = getPreferences(0).getBoolean("allQualities", false)
+        choices = media?.choices?.filter { it.audio == audio && (audio || showAll || it.deviceCompatible) } ?: emptyList()
         val labels = choices.map { choice ->
             if (choice.extractAudio && choice.format.isEmpty() && !choice.mp3) text("M4A · только звук", "M4A · audio only") else choice.label.replace("original", text("оригинал", "original"))
         }.ifEmpty {
