@@ -29,6 +29,21 @@ class MainActivity : Activity() {
     private lateinit var clearLink: TextView
     private lateinit var status: TextView
     private lateinit var cancelDownload: Button
+    private lateinit var pauseDownload: Button
+    private lateinit var retryDownload: Button
+    private lateinit var fileSize: TextView
+    private lateinit var editInfo: Button
+    private var infoDialog: android.app.Dialog? = null
+    private lateinit var codecLabel: TextView
+    private lateinit var codecSpinner: Spinner
+    private lateinit var audioLanguageLabel: TextView
+    private lateinit var audioLanguageSpinner: Spinner
+    private var selectedCodec = "Auto"
+    private var selectedAudioLanguage: String? = null
+    private var codecKeys = emptyList<String>()
+    private var languageKeys = emptyList<String>()
+    private var updatingFilters = false
+    private var checkingUpdate = false
     private lateinit var title: TextView
     private lateinit var spinner: Spinner
     private lateinit var bitrateSpinner: Spinner
@@ -87,18 +102,18 @@ class MainActivity : Activity() {
             main.postDelayed(this, 500)
         }
     }
-    private val lime = Color.rgb(194, 255, 112)
+    private val palette get() = AppTheme.colors(this)
+    private val lime get() = palette.accent
     private fun text(ru: String, en: String) = if (english) en else ru
     private fun dp(n: Int) = (n * resources.displayMetrics.density).toInt()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppTheme.apply(this)
         super.onCreate(savedInstanceState)
         english = getPreferences(0).getBoolean("english", false)
         engine = MediaEngine(applicationContext)
-        window.statusBarColor = Color.rgb(15, 20, 16)
-        window.navigationBarColor = Color.rgb(15, 20, 16)
         val scroll = ScrollView(this).apply {
-            setBackgroundColor(Color.rgb(15, 20, 16)); isFillViewport = true
+            setBackgroundColor(palette.color(15, 20, 16)); isFillViewport = true
             clipToPadding = true
         }
         root = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(16), dp(20), dp(24)) }
@@ -117,6 +132,7 @@ class MainActivity : Activity() {
             addView(brand, LinearLayout.LayoutParams(0, -2, 1f))
             settingsButton = ImageButton(this@MainActivity).apply {
                 setImageResource(R.drawable.ic_settings_outline)
+                imageTintList = ColorStateList.valueOf(lime)
                 setPadding(dp(12), dp(12), dp(12), dp(12))
                 background = surface()
                 setOnClickListener { showAppSettings() }
@@ -124,7 +140,7 @@ class MainActivity : Activity() {
             addView(settingsButton, LinearLayout.LayoutParams(dp(48), dp(48)))
         })
         heading = label("", 24).apply { setPadding(0, dp(16), 0, dp(4)) }
-        subtitle = label("", 14).apply { setTextColor(Color.rgb(170, 185, 169)); setPadding(0, 0, 0, dp(8)) }
+        subtitle = label("", 14).apply { setTextColor(palette.color(170, 185, 169)); setPadding(0, 0, 0, dp(8)) }
         mode = button("") { switchMode(false) }
         audioMode = button("") { switchMode(true) }
         root.removeView(mode); root.removeView(audioMode)
@@ -134,9 +150,9 @@ class MainActivity : Activity() {
             addView(mode, LinearLayout.LayoutParams(0, dp(48), 1f))
             addView(audioMode, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(6) })
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(20) })
-        linkLabel = label("", 14).apply { setTextColor(Color.rgb(175, 190, 174)); setPadding(0, 0, 0, dp(10)) }
+        linkLabel = label("", 14).apply { setTextColor(palette.color(175, 190, 174)); setPadding(0, 0, 0, dp(10)) }
         input = EditText(this).apply {
-            textSize = 16f; setSingleLine(); setTextColor(Color.WHITE); setHintTextColor(Color.rgb(144, 159, 144))
+            textSize = 16f; setSingleLine(); setTextColor(palette.text); setHintTextColor(palette.color(144, 159, 144))
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_VARIATION_URI
             background = surface(); setPadding(dp(16), dp(14), dp(54), dp(14))
             minimumHeight = dp(58)
@@ -144,11 +160,11 @@ class MainActivity : Activity() {
         }
         clearLink = TextView(this).apply {
             text = "×"; textSize = 28f; gravity = android.view.Gravity.CENTER
-            setTextColor(Color.rgb(175, 190, 174)); isFocusable = false
+            setTextColor(palette.color(175, 190, 174)); isFocusable = false
             contentDescription = text("Очистить ссылку", "Clear link")
             background = android.graphics.drawable.RippleDrawable(
                 ColorStateList.valueOf(Color.argb(50, 194, 255, 112)), null,
-                GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(16).toFloat() })
+                GradientDrawable().apply { setColor(palette.text); cornerRadius = dp(16).toFloat() })
             visibility = View.GONE
             setOnClickListener { input.text.clear(); input.requestFocus() }
         }
@@ -175,13 +191,36 @@ class MainActivity : Activity() {
             }
         }.apply {
             scaleType = ImageView.ScaleType.FIT_CENTER
-            background = surface(Color.rgb(15, 20, 16)); clipToOutline = true
+            background = surface(palette.color(15, 20, 16)); clipToOutline = true
             visibility = View.GONE
         }
         title = label("", 18).apply { setPadding(0, 0, 0, dp(4)); setTypeface(null, Typeface.BOLD); maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END }
-        qualityLabel = label("", 14).apply { setTextColor(Color.rgb(175, 190, 174)); setPadding(0, 0, 0, dp(6)) }
+        qualityLabel = label("", 14).apply { setTextColor(palette.color(175, 190, 174)); setPadding(0, 0, 0, dp(6)) }
         spinner = optionSpinner { qualityLabel.text }.apply { background = surface(); minimumHeight = dp(56); setPadding(dp(10), 0, dp(10), 0) }
         root.addView(spinner)
+        codecLabel = label("", 14)
+        codecSpinner = optionSpinner { codecLabel.text }.apply { background = surface(); minimumHeight = dp(52) }
+        audioLanguageLabel = label("", 14)
+        audioLanguageSpinner = optionSpinner { audioLanguageLabel.text }.apply { background = surface(); minimumHeight = dp(52) }
+        fun filterListener(codec: Boolean) = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (updatingFilters) return
+                if (position != (if (codec) codecSpinner else audioLanguageSpinner).selectedItemPosition) return
+                if (codec) {
+                    val key = codecKeys.getOrNull(position) ?: return
+                    if (key == selectedCodec) return
+                    selectedCodec = key
+                } else {
+                    val key = languageKeys.getOrNull(position) ?: return
+                    if (key == selectedAudioLanguage) return
+                    selectedAudioLanguage = key
+                }
+                refreshChoices(); refreshExportOptions()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+        codecSpinner.onItemSelectedListener = filterListener(true)
+        audioLanguageSpinner.onItemSelectedListener = filterListener(false)
         val exportPrefs = getSharedPreferences("export", MODE_PRIVATE)
         containerLabel = label("", 14)
         containerSpinner = optionSpinner { containerLabel.text }.apply {
@@ -190,7 +229,7 @@ class MainActivity : Activity() {
         }
         bitrateLabel = label("", 14)
         bitrateHint = label("", 12).apply {
-            setTextColor(Color.rgb(153, 170, 150)); setPadding(dp(2), 0, dp(2), dp(6))
+            setTextColor(palette.color(153, 170, 150)); setPadding(dp(2), 0, dp(2), dp(6))
         }
         bitrateSpinner = optionSpinner { bitrateLabel.text }.apply {
             background = surface(); minimumHeight = dp(54)
@@ -198,27 +237,27 @@ class MainActivity : Activity() {
             setSelection(bitrates.indexOf(exportPrefs.getInt("bitrate", 192)).coerceAtLeast(0))
         }
         embedMetadata = Switch(this).apply {
-            setTextColor(Color.WHITE); isChecked = exportPrefs.getBoolean("metadata", true)
+            setTextColor(palette.text); isChecked = exportPrefs.getBoolean("metadata", true)
             setOnCheckedChangeListener { _, checked -> exportPrefs.edit().putBoolean("metadata", checked).apply() }
         }
         embedCover = Switch(this).apply {
-            setTextColor(Color.WHITE); isChecked = exportPrefs.getBoolean("cover", true)
+            setTextColor(palette.text); isChecked = exportPrefs.getBoolean("cover", true)
             setOnCheckedChangeListener { _, checked -> exportPrefs.edit().putBoolean("cover", checked).apply() }
         }
         listOf(containerLabel, bitrateLabel).forEach {
-            it.setTextColor(Color.rgb(175, 190, 174)); it.setPadding(0, dp(4), 0, dp(4))
+            it.setTextColor(palette.color(175, 190, 174)); it.setPadding(0, dp(4), 0, dp(4))
         }
         listOf(spinner, containerSpinner, bitrateSpinner).forEach {
-            it.background = surface(Color.rgb(18, 25, 19)); it.minimumHeight = dp(52)
+            it.background = surface(palette.color(18, 25, 19)); it.minimumHeight = dp(52)
             it.setPadding(dp(2), 0, dp(2), 0)
         }
         listOf(embedMetadata, embedCover).forEach {
             it.textSize = 15f; it.minimumHeight = dp(64)
             it.setPadding(dp(12), dp(10), dp(12), dp(10))
-            it.background = surface(Color.rgb(22, 30, 23))
+            it.background = surface(palette.color(22, 30, 23))
             it.switchPadding = dp(12)
-            it.thumbTintList = ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Color.rgb(78, 91, 77), lime, Color.rgb(151, 166, 147)))
-            it.trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(Color.rgb(80, 107, 49), Color.rgb(55, 66, 55)))
+            it.thumbTintList = ColorStateList(arrayOf(intArrayOf(-android.R.attr.state_enabled), intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(palette.color(78, 91, 77), lime, palette.color(151, 166, 147)))
+            it.trackTintList = ColorStateList(arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()), intArrayOf(palette.color(80, 107, 49), palette.color(55, 66, 55)))
         }
         bitrateSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { refreshExportOptions() }
@@ -242,6 +281,7 @@ class MainActivity : Activity() {
                 try {
                     DownloadService.forgetCompleted()
                     startForegroundService(Intent(this, DownloadService::class.java).apply {
+                        putExtra("mediaJson", MediaTransfer.encode(found)); putExtra("choiceJson", MediaTransfer.choice(selected).toString())
                         putExtra("url", found.url); putExtra("title", found.title); putExtra("thumbnail", found.thumbnail)
                         putExtra("selector", selected.selector); putExtra("label", selected.label)
                         putExtra("audio", selected.audio); putExtra("mp3", selected.mp3)
@@ -259,7 +299,7 @@ class MainActivity : Activity() {
             background = surface(); setPadding(dp(20), dp(20), dp(20), dp(12))
         }
         exportFields = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        listOf(qualityLabel, spinner, containerLabel, containerSpinner, bitrateLabel, bitrateSpinner, bitrateHint).forEach {
+        listOf(codecLabel, codecSpinner, audioLanguageLabel, audioLanguageSpinner, qualityLabel, spinner, containerLabel, containerSpinner, bitrateLabel, bitrateSpinner, bitrateHint).forEach {
             root.removeView(it)
             exportFields.addView(it, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(8) })
         }
@@ -284,7 +324,9 @@ class MainActivity : Activity() {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) { refreshExportOptions() }
             override fun onNothingSelected(parent: AdapterView<*>?) = Unit
         }
-        listOf(resultLabel, thumbnail, title, exportSummary, download).forEach {
+        fileSize = TextView(this).apply { textSize = 13f; setTextColor(palette.color(175, 190, 174)); setPadding(0, dp(4), 0, dp(4)) }
+        editInfo = button("") { showMediaEditor() }
+        listOf(resultLabel, thumbnail, title, editInfo, exportSummary, fileSize, download).forEach {
             root.removeView(it); resultCard.addView(it, LinearLayout.LayoutParams(-1, if (it == download || it is Spinner) dp(54) else -2).apply { bottomMargin = dp(if (it == qualityLabel || it == bitrateLabel || it == containerLabel) 4 else 10) })
         }
         root.addView(resultCard, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(8) })
@@ -295,6 +337,16 @@ class MainActivity : Activity() {
         status = label("", 14).apply { setLineSpacing(dp(4).toFloat(), 1f) }
         cancelDownload = button("") { showCancelDownload() }
         style(cancelDownload, false)
+        pauseDownload = button("") {
+            val current = DownloadService.state ?: return@button
+            val request = Intent(this, DownloadService::class.java).setAction(if (current.paused) DownloadService.RESUME else DownloadService.PAUSE)
+            if (current.paused) startForegroundService(request) else startService(request)
+        }
+        retryDownload = button("") {
+            if (busy) return@button
+            startForegroundService(Intent(this, DownloadService::class.java).setAction(DownloadService.RETRY).putExtra("english", english))
+            followingDownload = true; busy = true; saved = false; lastError = ""; refresh()
+        }
         save = button("") {
             if (saved || busy) return@button
             val file = ready ?: return@button
@@ -308,7 +360,7 @@ class MainActivity : Activity() {
             }
             startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE); type = mime
-                putExtra(Intent.EXTRA_TITLE, "${media?.title?.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_")?.take(100) ?: "Flow"}.${file.extension}")
+                putExtra(Intent.EXTRA_TITLE, MediaStorage.displayName(media ?: Media("", "Flow", emptyList()), file.extension))
             }, 1)
         }
         details = button("") {
@@ -324,6 +376,7 @@ class MainActivity : Activity() {
             gravity = android.view.Gravity.CENTER_VERTICAL or android.view.Gravity.START
             setPadding(dp(16), 0, dp(16), 0)
             compoundDrawablePadding = dp(12)
+            compoundDrawableTintList = ColorStateList.valueOf(lime)
             setCompoundDrawablesRelativeWithIntrinsicBounds(R.drawable.ic_folder_outline, 0, 0, 0)
         }
         input.addTextChangedListener(object : TextWatcher {
@@ -339,10 +392,23 @@ class MainActivity : Activity() {
         })
         refresh()
         animateEntrance(listOf(brand, heading, subtitle, mode.parent as View, linkLabel, input, analyze), 24L)
+        DownloadService.restore(applicationContext)
         if (DownloadService.state != null) {
             followingDownload = true; syncDownload()
         }
         handleShare(intent)
+        savedInstanceState?.let { state ->
+            input.setText(state.getString("link", ""))
+            audio = state.getBoolean("audio")
+            selectedCodec = state.getString("codec", "Auto")
+            selectedAudioLanguage = state.getString("track")
+            media = state.getString("media")?.let { runCatching { MediaTransfer.decode(it) }.getOrNull() }
+            media?.let { title.text = it.title; refreshChoices(); loadThumbnail(it) }
+            spinner.setSelection(state.getInt("choice", 0).coerceAtLeast(0))
+            containerSpinner.setSelection(state.getInt("container", 0))
+            if (DownloadService.state != null) { followingDownload = true; syncDownload() }
+            refresh()
+        }
     }
     private fun switchMode(next: Boolean) {
         if (audio == next) return
@@ -357,8 +423,8 @@ class MainActivity : Activity() {
                 .setInterpolator(android.view.animation.OvershootInterpolator(1.15f)).start()
         }
     }
-    private fun surface(color: Int = Color.rgb(28, 36, 29)) = GradientDrawable().apply {
-        setColor(color); cornerRadius = dp(16).toFloat(); setStroke(dp(1), Color.rgb(49, 62, 49))
+    private fun surface(color: Int = palette.color(28, 36, 29)) = GradientDrawable().apply {
+        setColor(color); cornerRadius = dp(16).toFloat(); setStroke(dp(1), palette.color(49, 62, 49))
     }
     private fun motionEnabled() = ValueAnimator.areAnimatorsEnabled()
     private fun animateEntrance(views: List<View>, offset: Long = 0L) {
@@ -377,8 +443,8 @@ class MainActivity : Activity() {
             .setInterpolator(android.view.animation.DecelerateInterpolator()).start()
     }
     private fun style(button: Button, primary: Boolean) {
-        button.background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(Color.argb(45, 255, 255, 255)), surface(if (primary) lime else Color.rgb(28, 36, 29)), null)
-        button.setTextColor(if (primary) Color.rgb(20, 28, 16) else Color.rgb(220, 231, 216))
+        button.background = android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(Color.argb(45, 255, 255, 255)), surface(if (primary) lime else palette.color(28, 36, 29)), null)
+        button.setTextColor(if (primary) palette.onAccent else palette.color(220, 231, 216))
         button.setTypeface(null, if (primary) Typeface.BOLD else Typeface.NORMAL)
         button.alpha = if (button.isEnabled) 1f else .45f
     }
@@ -395,6 +461,9 @@ class MainActivity : Activity() {
         input.hint = text("Вставьте ссылку YouTube", "Paste a YouTube link")
         analyze.text = text("Показать варианты", "Show options")
         download.text = text("↓  Подготовить файл", "↓  Prepare download")
+        editInfo.text = text("Название и файл  ›", "Title and file  ›")
+        editInfo.isEnabled = !busy && ready == null && !saved
+        style(editInfo, false)
         save.text = if (saved) text("✓  Уже сохранено", "✓  Already saved") else text("Сохранить в папку Flow", "Save to Flow folder")
         update.text = text("↻  Обновить движок", "↻  Update engine")
         historyButton.text = text("Мои загрузки", "My downloads")
@@ -411,10 +480,18 @@ class MainActivity : Activity() {
         resultCard.visibility = title.visibility
         if (!wasCardVisible && resultCard.visibility == View.VISIBLE) revealResultCard()
         qualityLabel.visibility = title.visibility; spinner.visibility = title.visibility
-        download.visibility = if (media != null && ready == null) View.VISIBLE else View.GONE
+        download.visibility = if (media != null && ready == null && !saved) View.VISIBLE else View.GONE
         progress.visibility = if (busy) View.VISIBLE else View.GONE
         cancelDownload.text = text("✕  Отменить загрузку", "✕  Cancel download")
         cancelDownload.visibility = if (busy && DownloadService.state?.running == true && DownloadService.state?.saving != true) View.VISIBLE else View.GONE
+        val transfer = DownloadService.state
+        pauseDownload.visibility = if (busy && transfer?.running == true && !transfer.saving) View.VISIBLE else View.GONE
+        pauseDownload.text = if (transfer?.pausing == true) text("Ставим на паузу…", "Pausing…") else if (transfer?.paused == true) text("Продолжить загрузку", "Resume download") else text("Пауза", "Pause")
+        pauseDownload.isEnabled = transfer?.pausing != true && transfer?.processing != true
+        style(pauseDownload, transfer?.paused == true)
+        retryDownload.text = text("Повторить с теми же настройками", "Retry with the same settings")
+        retryDownload.visibility = if (!busy && transfer != null && transfer.error.isNotBlank() && transfer.error != DownloadService.CANCELLED && transfer.file == null) View.VISIBLE else View.GONE
+        style(retryDownload, true)
         details.text = text("Подробности ошибки", "Error details")
         details.visibility = if (lastError.isNotEmpty() && lastError != DownloadService.CANCELLED) View.VISIBLE else View.GONE
         style(language, false); style(mode, !audio); style(audioMode, audio)
@@ -425,7 +502,7 @@ class MainActivity : Activity() {
                 GradientDrawable().apply { setColor(if (selected) lime else Color.TRANSPARENT); cornerRadius = dp(13).toFloat() }, null)
         }
         if (!busy) status.text = if (lastError.isNotEmpty()) friendlyError(lastError) else if (saved) text("✓ Сохранено в ${if (audio) "Music/Flow" else "Movies/Flow"}.", "✓ Saved to ${if (audio) "Music/Flow" else "Movies/Flow"}.") else if (ready != null) text("Готово! Сохраните файл на устройстве.", "Ready! Save the file to your device.") else text("Без сервера · Загрузка работает в фоне\nВ YouTube нажмите «Поделиться» → Flow.", "No server · Downloads work in the background\nIn YouTube, tap Share → Flow.")
-        status.setTextColor(if (lastError.isNotEmpty() && lastError != DownloadService.CANCELLED) Color.rgb(255, 171, 151) else Color.rgb(175, 190, 174))
+        status.setTextColor(if (lastError.isNotEmpty() && lastError != DownloadService.CANCELLED) palette.color(255, 171, 151) else palette.color(175, 190, 174))
         if (!busy && lastError.isEmpty() && !saved && ready == null) {
             status.text = text("Вставьте ссылку или поделитесь видео из YouTube.", "Paste a link or share a video from YouTube.")
         }
@@ -437,15 +514,15 @@ class MainActivity : Activity() {
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(24), dp(24), dp(24), dp(24))
-            background = surface(Color.rgb(24, 32, 25))
+            background = surface(palette.color(24, 32, 25))
         }
         panel.addView(TextView(this).apply {
             text = text("Остановить загрузку?", "Stop downloading?")
-            textSize = 22f; setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD)
+            textSize = 22f; setTextColor(palette.text); setTypeface(null, Typeface.BOLD)
         })
         panel.addView(TextView(this).apply {
             text = text("Незавершённый файл будет удалён. Загрузку можно начать заново.", "The unfinished file will be removed. You can start the download again.")
-            textSize = 15f; setTextColor(Color.rgb(175, 190, 174)); setLineSpacing(dp(3).toFloat(), 1f)
+            textSize = 15f; setTextColor(palette.color(175, 190, 174)); setLineSpacing(dp(3).toFloat(), 1f)
         }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12); bottomMargin = dp(24) })
         panel.addView(Button(this).apply {
             text = text("Продолжить загрузку", "Keep downloading")
@@ -455,7 +532,7 @@ class MainActivity : Activity() {
         panel.addView(Button(this).apply {
             text = text("Остановить", "Stop download")
             textSize = 16f; isAllCaps = false; style(this, false)
-            setTextColor(Color.rgb(255, 174, 157))
+            setTextColor(palette.color(255, 174, 157))
             setOnClickListener {
                 val current = DownloadService.state
                 if (current?.running == true && !current.saving)
@@ -474,6 +551,65 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun showMediaEditor() {
+        val original = media ?: return
+        if (busy || ready != null || saved) return
+        infoDialog?.dismiss()
+        val dialog = android.app.Dialog(this)
+        infoDialog = dialog
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL; background = surface()
+            setPadding(dp(20), dp(20), dp(20), dp(24))
+        }
+        panel.addView(TextView(this).apply {
+            text = text("Название и файл", "Title and file"); textSize = 22f
+            setTextColor(palette.text); setTypeface(null, Typeface.BOLD)
+        })
+        fun field(caption: String, value: String, hint: String): EditText {
+            panel.addView(TextView(this).apply {
+                text = caption; textSize = 14f; setTextColor(palette.color(175, 190, 174))
+            }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(16); bottomMargin = dp(8) })
+            return EditText(this).apply {
+                setText(value); this.hint = hint; textSize = 16f; setSingleLine()
+                setTextColor(palette.text); setHintTextColor(palette.color(144, 159, 144))
+                background = surface(); minimumHeight = dp(52); setPadding(dp(12), dp(8), dp(12), dp(8))
+                inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
+                filters = arrayOf(android.text.InputFilter.LengthFilter(200))
+                contentDescription = caption
+                panel.addView(this, LinearLayout.LayoutParams(-1, -2))
+            }
+        }
+        val name = field(text("Название в плеере", "Title in player"), original.title, "")
+        val artist = field(text("Исполнитель", "Artist"), original.artist, text("Необязательно", "Optional"))
+        val file = field(text("Имя файла", "File name"), original.fileName.ifBlank { MediaStorage.safeName(original.title) }, "")
+        panel.addView(TextView(this).apply {
+            text = text("Расширение добавится автоматически. Название и исполнитель записываются в файл, если включены метаданные.",
+                "The extension is added automatically. Title and artist are written into the file when metadata is enabled.")
+            textSize = 12f; setTextColor(palette.color(175, 190, 174))
+        }, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10) })
+        val actions = LinearLayout(this)
+        actions.addView(Button(this).apply {
+            text = text("Отмена", "Cancel"); isAllCaps = false; style(this, false)
+            setOnClickListener { dialog.dismiss() }
+        }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { rightMargin = dp(8) })
+        actions.addView(Button(this).apply {
+            text = text("Сохранить", "Save"); isAllCaps = false; style(this, true)
+            setOnClickListener {
+                if (name.text.isBlank()) { name.error = text("Введите название", "Enter a title"); name.requestFocus(); return@setOnClickListener }
+                if (file.text.isBlank()) { file.error = text("Введите имя файла", "Enter a file name"); file.requestFocus(); return@setOnClickListener }
+                media = original.copy(title = name.text.toString().trim(), artist = artist.text.toString().trim(), fileName = MediaStorage.safeName(file.text.toString()))
+                title.text = media!!.title; refresh(); dialog.dismiss()
+            }
+        }, LinearLayout.LayoutParams(0, dp(48), 1f))
+        panel.addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20) })
+        dialog.setContentView(ScrollView(this).apply { addView(panel) })
+        dialog.setOnDismissListener { if (infoDialog === dialog) infoDialog = null }
+        dialog.show()
+        dialog.window?.apply {
+            setBackgroundDrawableResource(android.R.color.transparent); setGravity(android.view.Gravity.BOTTOM)
+            setLayout(-1, -2); setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE)
+        }
+    }
     private fun showAppSettings() {
         if (busy) return
         appSettingsDialog?.dismiss()
@@ -486,7 +622,7 @@ class MainActivity : Activity() {
         }
         fun caption(value: String, size: Int, muted: Boolean = false) = TextView(this).apply {
             text = value; textSize = size.toFloat()
-            setTextColor(if (muted) Color.rgb(175, 190, 174) else Color.WHITE)
+            setTextColor(if (muted) palette.color(175, 190, 174) else palette.text)
         }
         val heading = caption("", 22).apply { setTypeface(null, Typeface.BOLD) }
         panel.addView(heading)
@@ -498,11 +634,28 @@ class MainActivity : Activity() {
         languages.addView(russian, LinearLayout.LayoutParams(0, dp(48), 1f))
         languages.addView(englishButton, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(8) })
         panel.addView(languages)
+        val themeCaption = caption(text("Тема оформления", "Appearance"), 14, true)
+        panel.addView(themeCaption,
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20); bottomMargin = dp(10) })
+        val themes = LinearLayout(this)
+        listOf("dark" to text("Тёмная", "Dark"), "light" to text("Светлая", "Light"), "system" to text("Системная", "System")).forEachIndexed { index, (key, label) ->
+            themes.addView(Button(this).apply {
+                this.text = label; textSize = 13f; isAllCaps = false; setPadding(dp(4), 0, dp(4), 0)
+                style(this, AppTheme.mode(this@MainActivity) == key)
+                setOnClickListener {
+                    if (AppTheme.mode(this@MainActivity) != key) {
+                        getSharedPreferences("appearance", 0).edit().putString("theme", key).apply()
+                        dialog.dismiss(); recreate()
+                    }
+                }
+            }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { if (index > 0) leftMargin = dp(6) })
+        }
+        panel.addView(themes)
         val qualityCard = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = android.view.Gravity.CENTER_VERTICAL
             background = GradientDrawable().apply {
-                setColor(Color.rgb(24, 31, 25)); setStroke(dp(1), Color.rgb(54, 66, 54)); cornerRadius = dp(16).toFloat()
+                setColor(palette.color(24, 31, 25)); setStroke(dp(1), palette.color(54, 66, 54)); cornerRadius = dp(16).toFloat()
             }
             setPadding(dp(16), dp(14), dp(12), dp(14))
         }
@@ -516,7 +669,7 @@ class MainActivity : Activity() {
             isChecked = getPreferences(0).getBoolean("allQualities", false)
             buttonTintList = ColorStateList(
                 arrayOf(intArrayOf(android.R.attr.state_checked), intArrayOf()),
-                intArrayOf(lime, Color.rgb(142, 153, 143)))
+                intArrayOf(lime, palette.color(142, 153, 143)))
             setOnCheckedChangeListener { _, checked ->
                 getPreferences(0).edit().putBoolean("allQualities", checked).apply()
                 refreshChoices()
@@ -531,23 +684,33 @@ class MainActivity : Activity() {
             setOnClickListener { dialog.dismiss(); update.performClick() }
         }
         panel.addView(updateAction, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(20); bottomMargin = dp(20) })
+        val appUpdate = Button(this).apply {
+            isAllCaps = false; textSize = 16f; minHeight = dp(52)
+            setOnClickListener { dialog.dismiss(); checkAppUpdate() }
+        }
+        panel.addView(appUpdate, LinearLayout.LayoutParams(-1, -2).apply { bottomMargin = dp(20) })
         val done = Button(this).apply { isAllCaps = false; textSize = 16f; setOnClickListener { dialog.dismiss() } }
         panel.addView(done, LinearLayout.LayoutParams(-1, dp(48)))
         fun refreshPanel() {
             heading.text = text("Настройки", "Settings")
             languageLabel.text = text("Язык приложения", "App language")
+            themeCaption.text = text("Тема оформления", "Appearance")
+            listOf(text("Тёмная", "Dark"), text("Светлая", "Light"), text("Системная", "System")).forEachIndexed { index, value ->
+                (themes.getChildAt(index) as Button).text = value
+            }
             qualityTitle.text = text("Показывать все качества", "Show all qualities")
             qualityDescription.text = text("Включая форматы, которые телефон может не воспроизвести", "Also show formats your phone may not play")
             style(russian, !english); style(englishButton, english)
             updateAction.text = optionCaption(text("Обновить движок YouTube", "Update YouTube engine"),
                 text("Может помочь при ошибках скачивания", "May help with download errors"))
             style(updateAction, false)
+            appUpdate.text = text("Проверить обновление Flow", "Check for Flow updates"); style(appUpdate, false)
             done.text = text("Готово", "Done"); style(done, true)
         }
         fun setLanguage(value: Boolean) {
             english = value
             getPreferences(0).edit().putBoolean("english", english).apply()
-            refresh(); refreshPanel()
+            exportLanguage = null; refreshChoices(); refresh(); refreshPanel()
         }
         russian.setOnClickListener { setLanguage(false) }
         englishButton.setOnClickListener { setLanguage(true) }
@@ -585,6 +748,14 @@ class MainActivity : Activity() {
             containerSpinner.setSelection(selectedContainer)
         }
         val choice = choices.getOrNull(spinner.selectedItemPosition)
+        codecLabel.text = text("Кодек видео", "Video codec")
+        codecLabel.visibility = if (audio) View.GONE else View.VISIBLE
+        codecSpinner.visibility = codecLabel.visibility
+        codecSpinner.isEnabled = !busy
+        audioLanguageLabel.text = text("Язык аудиодорожки", "Audio track language")
+        audioLanguageLabel.visibility = if (languageKeys.size > 1) View.VISIBLE else View.GONE
+        audioLanguageSpinner.visibility = audioLanguageLabel.visibility
+        audioLanguageSpinner.isEnabled = !busy
         containerLabel.text = text("Формат видео", "Video format")
         containerLabel.visibility = if (audio) View.GONE else View.VISIBLE
         containerSpinner.visibility = containerLabel.visibility
@@ -618,6 +789,12 @@ class MainActivity : Activity() {
             advancedToggle.text = text("Дополнительно", "Advanced") + if (advancedFields.visibility == View.VISIBLE) "  −" else "  +"
             style(advancedToggle, false)
         }
+        if (::fileSize.isInitialized) {
+            val bytes = DownloadOptions.estimatedSize(choice, rate)
+            val size = if (bytes > 0) android.text.format.Formatter.formatShortFileSize(this, bytes) else ""
+            fileSize.text = if (size.isNotBlank()) text("Примерный размер: $size", "Estimated size: $size") else text("Размер файла пока неизвестен", "File size is not available yet")
+            if (!audio && choice != null) fileSize.text = fileSize.text.toString() + " · ${choice.codec}" + if (!choice.deviceCompatible) text("\nТелефон может не воспроизвести этот формат", "\nYour phone may not play this format") else ""
+        }
     }
 
     private fun optionSpinner(caption: () -> CharSequence) = object : Spinner(this, Spinner.MODE_DIALOG) {
@@ -628,7 +805,7 @@ class MainActivity : Activity() {
                 override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
                     return (super.getView(position, convertView, parent) as CheckedTextView).apply {
                         textSize = 16f
-                        setTextColor(if (position == selectedItemPosition) lime else Color.rgb(235, 241, 232))
+                        setTextColor(if (position == selectedItemPosition) lime else palette.color(235, 241, 232))
                         checkMarkTintList = ColorStateList.valueOf(lime)
                         minHeight = dp(54)
                         setPadding(dp(20), dp(12), dp(20), dp(12))
@@ -646,7 +823,7 @@ class MainActivity : Activity() {
                 .create()
             picker.window?.apply {
                 setWindowAnimations(0)
-                setBackgroundDrawable(surface(Color.rgb(22, 30, 23)))
+                setBackgroundDrawable(surface(palette.color(22, 30, 23)))
             }
             picker.show()
             picker.getButton(AlertDialog.BUTTON_NEGATIVE).setTextColor(lime)
@@ -661,6 +838,8 @@ class MainActivity : Activity() {
         val originalBitrate = bitrateSpinner.selectedItemPosition
         val originalMetadata = embedMetadata.isChecked
         val originalCover = embedCover.isChecked
+        val originalCodec = selectedCodec
+        val originalLanguage = selectedAudioLanguage
         var confirmed = false
         (exportFields.parent as? android.view.ViewGroup)?.removeView(exportFields)
         val dialog = android.app.Dialog(this)
@@ -670,7 +849,7 @@ class MainActivity : Activity() {
             background = surface()
             addView(TextView(this@MainActivity).apply {
                 text = text("Настройки скачивания", "Download settings"); textSize = 21f
-                setTextColor(Color.WHITE); setTypeface(null, Typeface.BOLD); setPadding(0, 0, 0, dp(16))
+                setTextColor(palette.text); setTypeface(null, Typeface.BOLD); setPadding(0, 0, 0, dp(16))
             })
             addView(exportFields)
             val actions = LinearLayout(this@MainActivity)
@@ -687,6 +866,7 @@ class MainActivity : Activity() {
         dialog.setContentView(ScrollView(this).apply { addView(panel) })
         dialog.setOnDismissListener {
             if (!confirmed) {
+                selectedCodec = originalCodec; selectedAudioLanguage = originalLanguage; refreshChoices()
                 spinner.setSelection(originalChoice)
                 containerSpinner.setSelection(originalContainer)
                 bitrateSpinner.setSelection(originalBitrate)
@@ -710,15 +890,15 @@ class MainActivity : Activity() {
 
     private fun optionCaption(title: String, subtitle: String): CharSequence = android.text.SpannableString("$title\n$subtitle").apply {
         setSpan(android.text.style.RelativeSizeSpan(.8f), title.length + 1, length, 0)
-        setSpan(android.text.style.ForegroundColorSpan(Color.rgb(153, 170, 150)), title.length + 1, length, 0)
+        setSpan(android.text.style.ForegroundColorSpan(palette.color(153, 170, 150)), title.length + 1, length, 0)
     }
 
     private fun exportAdapter(labels: List<String>) = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, labels) {
         private fun row(position: Int, dropdown: Boolean) = TextView(this@MainActivity).apply {
             text = getItem(position) + if (dropdown) "" else "   ▾"
-            textSize = 15f; setTextColor(Color.rgb(235, 241, 232)); gravity = android.view.Gravity.CENTER_VERTICAL
+            textSize = 15f; setTextColor(palette.color(235, 241, 232)); gravity = android.view.Gravity.CENTER_VERTICAL
             setPadding(dp(14), dp(12), dp(14), dp(12)); minHeight = dp(52)
-            setBackgroundColor(if (dropdown) Color.rgb(28, 36, 29) else Color.TRANSPARENT)
+            setBackgroundColor(if (dropdown) palette.color(28, 36, 29) else Color.TRANSPARENT)
         }
         override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, false)
         override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, true)
@@ -726,7 +906,29 @@ class MainActivity : Activity() {
 
     private fun refreshChoices() {
         val showAll = getPreferences(0).getBoolean("allQualities", false)
-        choices = media?.choices?.filter { it.audio == audio && (audio || showAll || it.deviceCompatible) } ?: emptyList()
+        val previous = choices.getOrNull(spinner.selectedItemPosition)
+        val available = media?.choices?.filter { it.audio == audio && (audio || showAll || it.deviceCompatible) } ?: emptyList()
+        val languages = available.distinctBy { it.language }
+        val nextLanguages = languages.map { it.language }
+        val nextCodecs = listOf("Auto") + available.filterNot { it.audio }.map { it.codec }.distinct()
+        updatingFilters = true
+        if (selectedAudioLanguage !in nextLanguages) selectedAudioLanguage = nextLanguages.firstOrNull()
+        if (selectedCodec !in nextCodecs) selectedCodec = "Auto"
+        if (languageKeys != nextLanguages || exportLanguage != english) {
+            languageKeys = nextLanguages
+            audioLanguageSpinner.adapter = exportAdapter(languages.map { languageName(it.languageLabel) })
+        }
+        if (codecKeys != nextCodecs || exportLanguage != english) {
+            codecKeys = nextCodecs
+            codecSpinner.adapter = exportAdapter(nextCodecs.map { when(it) {
+                "Auto" -> text("Автоматически · совместимый", "Auto · compatible")
+                "H.264" -> text("H.264 · широкая совместимость", "H.264 · wide compatibility")
+                else -> it
+            } })
+        }
+        audioLanguageSpinner.setSelection(nextLanguages.indexOf(selectedAudioLanguage).coerceAtLeast(0))
+        codecSpinner.setSelection(nextCodecs.indexOf(selectedCodec).coerceAtLeast(0))
+        choices = DownloadOptions.select(available, audio, selectedCodec, selectedAudioLanguage)
         val labels = choices.map { choice ->
             if (choice.extractAudio && choice.format.isEmpty() && !choice.mp3) text("M4A · только звук", "M4A · audio only") else choice.label.replace("original", text("оригинал", "original"))
         }.ifEmpty {
@@ -736,14 +938,44 @@ class MainActivity : Activity() {
         spinner.adapter = object : ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item, labels) {
             private fun row(position: Int, dropdown: Boolean) = TextView(this@MainActivity).apply {
                 text = getItem(position) + if (dropdown) "" else "   ▾"
-                textSize = 16f; setTextColor(if (choices.isEmpty()) Color.rgb(144, 159, 144) else Color.rgb(235, 241, 232))
+                textSize = 16f; setTextColor(if (choices.isEmpty()) palette.color(144, 159, 144) else palette.color(235, 241, 232))
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 setPadding(dp(14), dp(16), dp(14), dp(16))
-                setBackgroundColor(if (dropdown) Color.rgb(28, 36, 29) else Color.TRANSPARENT)
+                setBackgroundColor(if (dropdown) palette.color(28, 36, 29) else Color.TRANSPARENT)
                 minHeight = dp(52)
             }
             override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, false)
             override fun getDropDownView(position: Int, convertView: View?, parent: android.view.ViewGroup): View = row(position, true)
+        }
+        spinner.setSelection(choices.indexOfFirst { it.label == previous?.label }.coerceAtLeast(0))
+        updatingFilters = false
+        refreshExportOptions()
+    }
+    private fun languageName(value: String): String {
+        val key = value.substringBefore(" ·")
+        val name = if (key == "und" || key.isBlank()) text("Основная дорожка", "Default track") else
+            java.util.Locale.forLanguageTag(key).getDisplayLanguage(if (english) java.util.Locale.ENGLISH else java.util.Locale.forLanguageTag("ru")).ifBlank { key }
+        return name + if (value.endsWith("original")) text(" · оригинал", " · original") else if (value.endsWith("auto")) text(" · автоперевод", " · auto-dubbed") else ""
+    }
+    private fun checkAppUpdate() {
+        if (checkingUpdate) return
+        checkingUpdate = true
+        Toast.makeText(this, text("Проверяем обновления…", "Checking for updates…"), Toast.LENGTH_SHORT).show()
+        worker.execute {
+            val result = runCatching { AppUpdates.latest() }
+            runOnUiThread {
+                checkingUpdate = false
+                if (isDestroyed || isFinishing) return@runOnUiThread
+                result.onSuccess { release ->
+                    val installed = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+                    val newer = AppUpdates.isNewer(release.version, installed)
+                    AlertDialog.Builder(this).setTitle(if (newer) text("Доступна Flow ${release.version}", "Flow ${release.version} is available") else text("У вас последняя версия", "You're up to date"))
+                        .setMessage(text("Установлена: $installed\nGitHub: ${release.version}", "Installed: $installed\nGitHub: ${release.version}"))
+                        .setPositiveButton(if (newer) text("Скачать APK", "Download APK") else "OK") { _, _ ->
+                            if (newer) startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.url)))
+                        }.setNegativeButton(if (newer) text("Позже", "Later") else null, null).show()
+                }.onFailure { Toast.makeText(this, text("Не удалось проверить. Проверьте интернет и повторите позже.", "Could not check. Check your connection and try later."), Toast.LENGTH_LONG).show() }
+            }
         }
     }
     private fun loadThumbnail(found: Media) {
@@ -813,7 +1045,12 @@ class MainActivity : Activity() {
         if (media !== current.media) {
             input.setText(current.media.url)
             media = current.media; audio = current.choice.audio
+            selectedCodec = current.choice.codec.ifBlank { "Auto" }; selectedAudioLanguage = current.choice.language
             title.text = current.media.title; refreshChoices(); loadThumbnail(current.media)
+            spinner.setSelection(choices.indexOfFirst { it.selector == current.choice.selector && it.format == if (audio) current.choice.format else "" }.coerceAtLeast(0))
+            containerSpinner.setSelection(if (current.choice.format == "mp4") 1 else 0)
+            bitrateSpinner.setSelection(bitrates.indexOf(current.choice.bitrate).coerceAtLeast(0))
+            embedMetadata.isChecked = current.choice.metadata; embedCover.isChecked = current.choice.cover
         }
         busy = current.running; ready = current.file?.takeIf { it.exists() }; lastError = current.error
         saved = current.savedUri.isNotEmpty() || saved
@@ -827,7 +1064,8 @@ class MainActivity : Activity() {
             if (current.etaSeconds >= 0 && current.progress in 0..99)
                 parts += text("осталось ${formatDuration(current.etaSeconds)}", "${formatDuration(current.etaSeconds)} left")
             val details = parts.joinToString(" · ").ifBlank { text("Вычисляем скорость и время…", "Calculating speed and time…") }
-            status.text = (current.stage.ifBlank { text("Загрузка", "Downloading") }) + "\n" + details
+            status.text = if (current.paused || current.pausing) current.stage.ifBlank { text("На паузе", "Paused") } + if (current.paused) text("\nНажмите «Продолжить». Прогресс сохранён.", "\nTap Resume. Download progress is kept.") else "" else
+                (current.stage.ifBlank { text("Загрузка", "Downloading") }) + "\n" + details
         }
         else {
             followingDownload = false
@@ -844,7 +1082,8 @@ class MainActivity : Activity() {
         if (busy) return
         busy = true; saved = false; lastError = ""; refresh()
         status.text = text("Сохраняем в папку устройства…", "Saving to your device folders…")
-        val safeTitle = rawTitle.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").trim().take(100).ifBlank { "Flow" }
+        val safeTitle = MediaStorage.safeName(rawTitle)
+        val displayName = MediaStorage.displayName(media ?: Media("", rawTitle, emptyList()), file.extension)
         val extension = file.extension.lowercase()
         val collection = if (mime.startsWith("audio/")) android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
             else android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
@@ -853,7 +1092,7 @@ class MainActivity : Activity() {
             var uri: android.net.Uri? = null
             try {
                 val values = android.content.ContentValues().apply {
-                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, "$safeTitle.$extension")
+                    put(android.provider.MediaStore.MediaColumns.DISPLAY_NAME, displayName)
                     put(android.provider.MediaStore.MediaColumns.MIME_TYPE, mime)
                     put(android.provider.MediaStore.MediaColumns.RELATIVE_PATH, relativePath)
                     put(android.provider.MediaStore.MediaColumns.IS_PENDING, 1)
@@ -986,12 +1225,12 @@ class MainActivity : Activity() {
         }
     }
     private fun label(value: String, size: Int) = TextView(this).apply {
-        text = value; textSize = size.toFloat(); setTextColor(Color.WHITE)
+        text = value; textSize = size.toFloat(); setTextColor(palette.text)
         setPadding(0, dp(12), 0, dp(12)); if (size >= 24) setTypeface(null, Typeface.BOLD)
         root.addView(this)
     }
     private fun button(value: String, action: () -> Unit) = Button(this).apply {
-        text = value; textSize = 16f; isAllCaps = false; setTextColor(Color.rgb(20, 28, 16))
+        text = value; textSize = 16f; isAllCaps = false; setTextColor(palette.onAccent)
         background = GradientDrawable().apply { setColor(lime); cornerRadius = dp(16).toFloat() }
         root.addView(this, LinearLayout.LayoutParams(-1, dp(56)).apply { topMargin = dp(12); bottomMargin = dp(8) })
         setOnTouchListener { view, event ->
@@ -1003,7 +1242,15 @@ class MainActivity : Activity() {
         }
         setOnClickListener { action() }
     }
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("link", input.text.toString()); outState.putBoolean("audio", audio)
+        outState.putString("media", media?.let { MediaTransfer.encode(it) })
+        outState.putString("codec", selectedCodec); outState.putString("track", selectedAudioLanguage)
+        outState.putInt("choice", spinner.selectedItemPosition); outState.putInt("container", containerSpinner.selectedItemPosition)
+        super.onSaveInstanceState(outState)
+    }
     override fun onDestroy() {
+        infoDialog?.dismiss()
         cancelDialog?.dismiss()
         appSettingsDialog?.dismiss()
         clipboardOffer?.dismiss()

@@ -55,7 +55,8 @@ class DownloadsActivity : Activity() {
     }
     private fun text(ru: String, en: String) = if (english) en else ru
     private fun dp(value: Int) = (value * resources.displayMetrics.density).toInt()
-    private val lime = Color.rgb(194, 255, 112)
+    private val palette get() = AppTheme.colors(this)
+    private val lime get() = palette.accent
     private fun animateRows() {
         if (selecting || !ValueAnimator.areAnimatorsEnabled()) return
         (0 until results.childCount).forEach { index ->
@@ -66,6 +67,7 @@ class DownloadsActivity : Activity() {
         }
     }
     override fun onCreate(savedInstanceState: Bundle?) {
+        AppTheme.apply(this)
         super.onCreate(savedInstanceState)
         english = intent.getBooleanExtra("english", false)
         history = DownloadHistory(this)
@@ -76,11 +78,11 @@ class DownloadsActivity : Activity() {
         pendingDeletion = savedInstanceState?.getString("pendingDeletion")?.let { uri -> history.list().find { it.uri == uri } }
         pendingBulkDeletion = savedInstanceState?.getStringArrayList("pendingBulkDeletion")
             ?.let { uris -> history.list().filter { it.uri in uris } }.orEmpty()
-        val scroll = ScrollView(this).apply { setBackgroundColor(Color.rgb(15, 20, 16)); isFillViewport = true }
+        val scroll = ScrollView(this).apply { setBackgroundColor(palette.color(15, 20, 16)); isFillViewport = true }
         list = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), 0, dp(16), dp(24)) }
         header = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL; setPadding(dp(16), dp(8), dp(16), 0) }
         val screen = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL; setBackgroundColor(Color.rgb(15, 20, 16))
+            orientation = LinearLayout.VERTICAL; setBackgroundColor(palette.color(15, 20, 16))
             addView(header)
             addView(scroll, LinearLayout.LayoutParams(-1, 0, 1f))
         }
@@ -102,13 +104,13 @@ class DownloadsActivity : Activity() {
         render()
     }
     private fun label(value: String, size: Int, muted: Boolean = false) = TextView(this).apply {
-        text = value; textSize = size.toFloat(); setTextColor(if (muted) Color.rgb(175, 190, 174) else Color.WHITE)
+        text = value; textSize = size.toFloat(); setTextColor(if (muted) palette.color(175, 190, 174) else palette.text)
         setPadding(0, dp(8), 0, dp(8)); setLineSpacing(dp(3).toFloat(), 1f)
         if (size >= 20) setTypeface(null, Typeface.BOLD)
     }
     private fun action(value: String, click: () -> Unit) = Button(this).apply {
         text = value; textSize = 14f; isAllCaps = false; setTextColor(lime)
-        background = GradientDrawable().apply { setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(12).toFloat() }
+        background = GradientDrawable().apply { setColor(palette.color(28, 36, 29)); cornerRadius = dp(12).toFloat() }
         minHeight = dp(48)
         setOnTouchListener { view, event ->
             if (ValueAnimator.areAnimatorsEnabled()) when (event.actionMasked) {
@@ -123,7 +125,7 @@ class DownloadsActivity : Activity() {
         text = value; textSize = 14f; gravity = android.view.Gravity.CENTER
         setTextColor(lime); minHeight = dp(48); isClickable = true; isFocusable = true
         contentDescription = description
-        val mask = GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(12).toFloat() }
+        val mask = GradientDrawable().apply { setColor(palette.text); cornerRadius = dp(12).toFloat() }
         background = RippleDrawable(ColorStateList.valueOf(Color.argb(42, 194, 255, 112)), null, mask)
         setOnTouchListener { view, event ->
             if (ValueAnimator.areAnimatorsEnabled()) when (event.actionMasked) {
@@ -140,10 +142,10 @@ class DownloadsActivity : Activity() {
         navigation.addView(label(text("Мои загрузки", "My downloads"), 22), LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(navigation, LinearLayout.LayoutParams(-1, -2))
         search = EditText(this).apply {
-            textSize = 16f; setSingleLine(); setTextColor(Color.WHITE)
-            setHintTextColor(Color.rgb(144, 159, 144)); hint = text("Поиск по названию", "Search by title")
+            textSize = 16f; setSingleLine(); setTextColor(palette.text)
+            setHintTextColor(palette.color(144, 159, 144)); hint = text("Поиск по названию", "Search by title")
             inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_AUTO_CORRECT
-            background = GradientDrawable().apply { setColor(Color.rgb(20, 27, 21)); cornerRadius = dp(14).toFloat(); setStroke(dp(1), Color.rgb(54, 67, 54)) }
+            background = GradientDrawable().apply { setColor(palette.color(20, 27, 21)); cornerRadius = dp(14).toFloat(); setStroke(dp(1), palette.color(54, 67, 54)) }
             setPadding(dp(16), dp(12), dp(16), dp(12)); minimumHeight = dp(54)
         }
         header.addView(search, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(10); bottomMargin = dp(4) })
@@ -157,13 +159,13 @@ class DownloadsActivity : Activity() {
         header.addView(sortButton, LinearLayout.LayoutParams(-1, dp(48)))
         selectionBar = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(12), dp(8), dp(12), dp(10))
-            background = GradientDrawable().apply { setColor(Color.rgb(23, 31, 24)); cornerRadius = dp(16).toFloat() }
+            background = GradientDrawable().apply { setColor(palette.color(23, 31, 24)); cornerRadius = dp(16).toFloat() }
             visibility = View.GONE
         }
         val summary = LinearLayout(this).apply { gravity = android.view.Gravity.CENTER_VERTICAL }
         summary.addView(cardAction("‹", text("Отменить выбор", "Cancel selection")) { toggleSelectionMode() }.apply { textSize = 30f }, LinearLayout.LayoutParams(dp(48), dp(48)))
         selectAll = CheckBox(this).apply {
-            textSize = 13f; setTextColor(Color.WHITE); buttonTintList = ColorStateList.valueOf(lime)
+            textSize = 13f; setTextColor(palette.text); buttonTintList = ColorStateList.valueOf(lime)
             setOnCheckedChangeListener { _, checked ->
                 val visible = visibleItems().map { it.uri }.toSet()
                 if (checked) selectedUris.addAll(visible) else selectedUris.removeAll(visible)
@@ -173,7 +175,7 @@ class DownloadsActivity : Activity() {
                 } else updateSelectionUi(visibleItems())
             }
         }
-        selectionCount = TextView(this).apply { textSize = 20f; setTextColor(Color.WHITE); gravity = android.view.Gravity.CENTER_VERTICAL }
+        selectionCount = TextView(this).apply { textSize = 20f; setTextColor(palette.text); gravity = android.view.Gravity.CENTER_VERTICAL }
         summary.addView(selectionCount, LinearLayout.LayoutParams(0, dp(48), 1f))
         summary.addView(iconAction(R.drawable.ic_share_outline, text("Поделиться", "Share")) { shareSelected() }.apply { tag = "bulk-share" }, LinearLayout.LayoutParams(dp(48), dp(48)))
         summary.addView(iconAction(R.drawable.ic_delete_outline, text("Удалить", "Delete")) { confirmDeleteSelected() }.apply { tag = "bulk-delete" }, LinearLayout.LayoutParams(dp(48), dp(48)))
@@ -194,7 +196,7 @@ class DownloadsActivity : Activity() {
                 music = audio; render()
             }.apply {
                 if (music == audio) {
-                    setTextColor(Color.rgb(15, 20, 16))
+                    setTextColor(palette.onAccent)
                     background = GradientDrawable().apply { setColor(lime); cornerRadius = dp(12).toFloat() }
                 }
                 isEnabled = !deleting
@@ -279,7 +281,7 @@ class DownloadsActivity : Activity() {
             }
             val thumbnail = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP
-                background = GradientDrawable().apply { setColor(Color.rgb(20, 27, 21)); cornerRadius = dp(10).toFloat() }
+                background = GradientDrawable().apply { setColor(palette.color(20, 27, 21)); cornerRadius = dp(10).toFloat() }
                 clipToOutline = true
                 contentDescription = item.title
             }
@@ -318,19 +320,19 @@ class DownloadsActivity : Activity() {
         fileMenu = dialog
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL; setPadding(dp(20), dp(20), dp(20), dp(20))
-            background = GradientDrawable().apply { setColor(Color.rgb(24, 32, 25)); cornerRadius = dp(24).toFloat() }
+            background = GradientDrawable().apply { setColor(palette.color(24, 32, 25)); cornerRadius = dp(24).toFloat() }
         }
         panel.addView(label(item.title, 18).apply {
             setTypeface(null, Typeface.BOLD); maxLines = 2; ellipsize = android.text.TextUtils.TruncateAt.END
         })
         panel.addView(label(android.text.format.Formatter.formatShortFileSize(this, item.bytes), 13, true).apply { setPadding(0, 0, 0, dp(16)) })
         fun menuRow(icon: Int, title: String, hint: String? = null, danger: Boolean = false, action: () -> Unit) {
-            val tint = if (danger) Color.rgb(255, 174, 157) else lime
+            val tint = if (danger) palette.color(255, 174, 157) else lime
             val row = LinearLayout(this).apply {
                 gravity = android.view.Gravity.CENTER_VERTICAL
                 setPadding(dp(12), dp(12), dp(12), dp(12)); minimumHeight = dp(56)
                 background = RippleDrawable(ColorStateList.valueOf(Color.argb(35, 194, 255, 112)), null,
-                    GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(12).toFloat() })
+                    GradientDrawable().apply { setColor(palette.text); cornerRadius = dp(12).toFloat() })
                 isFocusable = true; setOnClickListener { dialog.dismiss(); action() }
             }
             row.addView(ImageView(this).apply { setImageResource(icon); imageTintList = ColorStateList.valueOf(tint) },
@@ -344,7 +346,7 @@ class DownloadsActivity : Activity() {
         }
         menuRow(R.drawable.ic_open_outline, text("Открыть", "Open")) { access(item, false) }
         menuRow(R.drawable.ic_share_outline, text("Поделиться", "Share")) { access(item, true) }
-        panel.addView(View(this).apply { setBackgroundColor(Color.rgb(49, 62, 49)) },
+        panel.addView(View(this).apply { setBackgroundColor(palette.color(49, 62, 49)) },
             LinearLayout.LayoutParams(-1, dp(1)).apply { topMargin = dp(8); bottomMargin = dp(8) })
         menuRow(R.drawable.ic_delete_outline, text("Удалить файл", "Delete file"), text("С устройства и из списка загрузок", "From your device and downloads"), true) { confirmDelete(item) }
         menuRow(R.drawable.ic_hide_outline, text("Убрать из списка", "Remove from list"), text("Файл останется на устройстве", "The file stays on your device")) { removeEntry(item) }
@@ -383,7 +385,7 @@ class DownloadsActivity : Activity() {
         val options = object : ArrayAdapter<String>(this, android.R.layout.simple_list_item_single_choice, labels) {
             override fun getView(position: Int, convertView: View?, parent: android.view.ViewGroup): View {
                 return (super.getView(position, convertView, parent) as CheckedTextView).apply {
-                    setTextColor(if (position == sortOrder) lime else Color.WHITE)
+                    setTextColor(if (position == sortOrder) lime else palette.text)
                     checkMarkTintList = ColorStateList.valueOf(lime)
                     textSize = 16f; minHeight = dp(52)
                 }
@@ -402,7 +404,7 @@ class DownloadsActivity : Activity() {
         dialog.window?.apply {
             setWindowAnimations(0)
             setBackgroundDrawable(GradientDrawable().apply {
-                setColor(Color.rgb(28, 36, 29)); cornerRadius = dp(20).toFloat()
+                setColor(palette.color(28, 36, 29)); cornerRadius = dp(20).toFloat()
             })
         }
         dialog.setOnDismissListener { sortDialog = null }
@@ -412,9 +414,9 @@ class DownloadsActivity : Activity() {
 
     private fun rowBackground(selected: Boolean): RippleDrawable {
         val shape = GradientDrawable().apply {
-            setColor(if (selected) Color.rgb(35, 48, 34) else Color.rgb(28, 36, 29))
+            setColor(if (selected) palette.color(35, 48, 34) else palette.color(28, 36, 29))
             cornerRadius = dp(15).toFloat()
-            setStroke(dp(1), if (selected) Color.rgb(105, 151, 65) else Color.rgb(28, 36, 29))
+            setStroke(dp(1), if (selected) palette.color(105, 151, 65) else palette.color(28, 36, 29))
         }
         return RippleDrawable(ColorStateList.valueOf(Color.argb(36, 194, 255, 112)), shape, null)
     }
@@ -475,7 +477,7 @@ class DownloadsActivity : Activity() {
         contentDescription = description; tooltipText = description
         setPadding(dp(12), dp(12), dp(12), dp(12))
         background = RippleDrawable(ColorStateList.valueOf(Color.argb(42, 194, 255, 112)), null,
-            GradientDrawable().apply { setColor(Color.WHITE); cornerRadius = dp(24).toFloat() })
+            GradientDrawable().apply { setColor(palette.text); cornerRadius = dp(24).toFloat() })
         setOnClickListener { click() }
     }
 

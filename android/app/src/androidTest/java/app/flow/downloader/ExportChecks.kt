@@ -26,7 +26,9 @@ object ExportChecks {
             for (format in listOf("mp3", "m4a", "opus", "flac", "wav")) {
                 val dir = File(root, format).apply { mkdirs() }
                 val choice = Choice("best", format, true, format = format, bitrate = 128, metadata = true, cover = format != "wav")
-                val req = engine.exportRequest(Media(input.toURI().toString(), "Test", listOf(choice)), choice, dir).apply {
+                val customTitle = "Название: 100% \\ Test"
+                val customArtist = "Исполнитель: Flow"
+                val req = engine.exportRequest(Media(input.toURI().toString(), customTitle, listOf(choice), artist = customArtist, fileName = "My file"), choice, dir).apply {
                     addOption("--enable-file-urls"); addOption("--load-info-json", info.absolutePath)
                 }
                 val offline = YoutubeDLRequest(emptyList<String>()).addCommands(req.buildCommand().filter { it != input.toURI().toString() })
@@ -37,7 +39,8 @@ object ExportChecks {
                     val retriever = MediaMetadataRetriever()
                     try {
                         retriever.setDataSource(file.absolutePath)
-                        check(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) == "Flow Export Test")
+                        check(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_TITLE) == customTitle) { "Incorrect $format title" }
+                        check(retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_ARTIST) == customArtist) { "Incorrect $format artist" }
                         check(retriever.embeddedPicture != null) { "Missing $format cover" }
                     } finally { retriever.release() }
                 }

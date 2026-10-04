@@ -8,12 +8,19 @@ import android.os.Bundle
 class HistoryInstrumentation : Instrumentation() {
     private var exportChecks = false
     private var designChecks = false
-    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); exportChecks = arguments?.getString("exports") == "true"; designChecks = arguments?.getString("design") == "true"; start() }
+    private var transferChecks = false
+    override fun onCreate(arguments: Bundle?) { super.onCreate(arguments); exportChecks = arguments?.getString("exports") == "true"; designChecks = arguments?.getString("design") == "true"; transferChecks = arguments?.getString("transfer") == "true"; start() }
     override fun onStart() {
         val name = "history_test_${System.nanoTime()}"
         val preferences = targetContext.getSharedPreferences(name, 0)
         val result = Bundle()
         try {
+            if (transferChecks) {
+                result.putString("stream", TransferChecks.run(targetContext) + "\n")
+                finish(Activity.RESULT_OK, result)
+                return
+            }
+            FeatureChecks.run(targetContext)
             if (designChecks) DesignChecks.run(this)
             if (exportChecks) ExportChecks.run(context, targetContext)
             val store = DownloadHistory(targetContext, name)

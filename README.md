@@ -33,6 +33,19 @@ Flow prepares video and audio directly on your phone and keeps your saved files 
 
 ## Get started
 
+### Upcoming Android features (local development build)
+
+These changes are not included in the published **0.20.1** APK yet:
+
+- Pause and resume from the app or notification. Partial downloads are retained; reopening Flow offers manual continuation. Pause is disabled while combining, converting or saving the file. Continuation depends on the source still being available.
+- Estimated file size before downloading; an explicit “not available” message when YouTube provides no usable size information.
+- Video codec selection: Auto, H.264, VP9 or AV1, only when offered by the source and allowed by the compatibility setting. Changing the container does not convert the codec.
+- Audio track language selection when the source exposes multiple languages; original/auto-dub labels when YouTube reports them.
+- Retry a failed download with the same quality, language, codec, bitrate and file-detail settings.
+- Check for a newer Flow release in Settings and open its APK download on GitHub. Installation remains a user action.
+- Edit the player title, artist and file name before downloading. Title and artist are embedded only when metadata is enabled.
+- Dark (default), light and system appearance, including download history and dialogs.
+
 The current project version is **0.20.1**. On your phone, tap **[Download APK](https://github.com/yessensiv/flow-downloader/releases/latest/download/Flow.apk)** for the latest published build and open the downloaded file. Allow installation from your browser if Android asks. This is a debug build; no computer or build tools are needed to install it.
 
 1. Download the APK using the button above, or build it using [Android Studio or the Windows scripts](#build-the-android-app).

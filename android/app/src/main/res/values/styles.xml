@@ -1,4 +1,17 @@
 <resources>
+    <style name="FlowLightTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+        <item name="android:colorAccent">#306914</item>
+        <item name="android:alertDialogTheme">@style/FlowLightDialogTheme</item>
+        <item name="android:windowLightStatusBar">true</item>
+    </style>
+    <style name="FlowLightDialogTheme" parent="android:style/Theme.Material.Light.Dialog.Alert">
+        <item name="android:colorAccent">#306914</item>
+        <item name="android:colorBackground">#FFFFFF</item>
+        <item name="android:textColorPrimary">#192419</item>
+        <item name="android:textColorSecondary">#546650</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:backgroundDimAmount">0.4</item>
+    </style>
     <style name="FlowTheme" parent="android:style/Theme.Material.NoActionBar">
         <item name="android:colorAccent">#C2FF70</item>
         <item name="android:alertDialogTheme">@style/FlowDialogTheme</item>

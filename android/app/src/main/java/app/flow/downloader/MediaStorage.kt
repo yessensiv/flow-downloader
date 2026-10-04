@@ -6,6 +6,12 @@ import android.provider.MediaStore
 import java.io.File
 
 object MediaStorage {
+    fun safeName(value: String): String = value.replace(Regex("[\\p{Cntrl}\\\\/:*?\"<>|]"), "_")
+        .trim().trim('.').take(100).ifBlank { "Flow" }
+    fun displayName(media: Media, extension: String): String {
+        val base = safeName(media.fileName.ifBlank { media.title })
+        return if (base.endsWith(".$extension", true)) base else "$base.$extension"
+    }
     fun mime(file: File, audio: Boolean): String = when (file.extension.lowercase()) {
         "mp3" -> "audio/mpeg"
         "m4a" -> "audio/mp4"
@@ -21,11 +27,11 @@ object MediaStorage {
     fun save(context: Context, file: File, media: Media, audio: Boolean): String {
         check(android.os.Build.VERSION.SDK_INT >= 29)
         val resolver = context.contentResolver
-        val title = media.title.replace(Regex("[^\\p{L}\\p{N} ._-]"), "_").trim().take(100).ifBlank { "Flow" }
+        val title = media.title
         val mime = mime(file, audio)
         val collection = if (audio) MediaStore.Audio.Media.EXTERNAL_CONTENT_URI else MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         val uri = resolver.insert(collection, ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, "$title.${file.extension}")
+            put(MediaStore.MediaColumns.DISPLAY_NAME, displayName(media, file.extension))
             put(MediaStore.MediaColumns.MIME_TYPE, mime)
             put(MediaStore.MediaColumns.RELATIVE_PATH, if (audio) "Music/Flow" else "Movies/Flow")
             put(MediaStore.MediaColumns.IS_PENDING, 1)
