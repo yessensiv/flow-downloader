@@ -45,6 +45,8 @@ These changes are not included in the published **0.20.1** APK yet:
 - Check for a newer Flow release in Settings and open its APK download on GitHub. Installation remains a user action.
 - Edit the player title, artist and file name before downloading. Title and artist are embedded only when metadata is enabled.
 - Dark (default), light and system appearance, including download history and dialogs.
+- Duplicate warning before downloading an already saved video/audio file, with actions to open it or download another copy. Missing files are skipped; video and audio are checked separately.
+- Quiet update check at startup, at most once a day. A small in-app card appears only for a newer published version.
 
 The current project version is **0.20.1**. On your phone, tap **[Download APK](https://github.com/yessensiv/flow-downloader/releases/latest/download/Flow.apk)** for the latest published build and open the downloaded file. Allow installation from your browser if Android asks. This is a debug build; no computer or build tools are needed to install it.
 

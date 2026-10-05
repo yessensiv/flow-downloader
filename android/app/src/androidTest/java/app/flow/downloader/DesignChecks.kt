@@ -12,6 +12,10 @@ object DesignChecks {
     fun run(instrumentation: Instrumentation) {
         val preferences = instrumentation.targetContext.getSharedPreferences("appearance", 0)
         val previous = preferences.getString("theme", null)
+        val updates = instrumentation.targetContext.getSharedPreferences("updates", 0)
+        val previousCheck = updates.getLong("checked", 0)
+        val hadCheck = updates.contains("checked")
+        updates.edit().putLong("checked", System.currentTimeMillis()).commit()
         try {
             for (mode in listOf("dark", "light", "system")) {
                 preferences.edit().putString("theme", mode).commit()
@@ -19,6 +23,7 @@ object DesignChecks {
             }
         } finally {
             preferences.edit().let { if (previous == null) it.remove("theme") else it.putString("theme", previous) }.commit()
+            updates.edit().let { if (hadCheck) it.putLong("checked", previousCheck) else it.remove("checked") }.commit()
         }
     }
     private fun runOnce(instrumentation: Instrumentation) {

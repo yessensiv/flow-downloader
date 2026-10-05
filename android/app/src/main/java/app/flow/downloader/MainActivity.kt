@@ -22,6 +22,7 @@ import java.util.concurrent.Executors
 class MainActivity : Activity() {
     private val worker = Executors.newSingleThreadExecutor()
     private val imageWorker = Executors.newSingleThreadExecutor()
+    private val updateWorker = Executors.newSingleThreadExecutor()
     private lateinit var thumbnail: ImageView
     private lateinit var engine: MediaEngine
     private lateinit var root: LinearLayout
@@ -44,6 +45,9 @@ class MainActivity : Activity() {
     private var languageKeys = emptyList<String>()
     private var updatingFilters = false
     private var checkingUpdate = false
+    private var checkingDuplicate = false
+    private var duplicateDialog: AlertDialog? = null
+    private var updateNotice: LinearLayout? = null
     private lateinit var title: TextView
     private lateinit var spinner: Spinner
     private lateinit var bitrateSpinner: Spinner
@@ -72,6 +76,7 @@ class MainActivity : Activity() {
     private var exportTitle = "Flow"
     private var exportMime = "application/octet-stream"
     private var exportThumbnail = ""
+    private var exportSourceUrl = ""
     private lateinit var mode: Button
     private lateinit var audioMode: Button
     private lateinit var subtitle: TextView
@@ -275,23 +280,26 @@ class MainActivity : Activity() {
             exportPrefs.edit().putInt("bitrate", selected?.bitrate ?: 192).apply()
             val found = media
             if (selected != null && found != null) {
-                ready?.parentFile?.deleteRecursively(); ready = null
-                if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
-                    requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 20)
-                try {
-                    DownloadService.forgetCompleted()
-                    startForegroundService(Intent(this, DownloadService::class.java).apply {
-                        putExtra("mediaJson", MediaTransfer.encode(found)); putExtra("choiceJson", MediaTransfer.choice(selected).toString())
-                        putExtra("url", found.url); putExtra("title", found.title); putExtra("thumbnail", found.thumbnail)
-                        putExtra("selector", selected.selector); putExtra("label", selected.label)
-                        putExtra("audio", selected.audio); putExtra("mp3", selected.mp3)
-                        putExtra("extractAudio", selected.extractAudio); putExtra("english", english)
-                        putExtra("format", selected.format); putExtra("bitrate", selected.bitrate)
-                        putExtra("metadata", selected.metadata); putExtra("cover", selected.cover)
-                    })
-                    followingDownload = true; busy = true; saved = false; lastError = ""
-                    refresh(); status.text = text("Готовим файл. Можно свернуть приложение.", "Preparing file. You can leave the app.")
-                } catch (e: Exception) { lastError = e.message.orEmpty(); refresh() }
+                checkDuplicate(found, selected.audio) {
+                    if (busy || media !== found || audio != selected.audio) return@checkDuplicate
+                    ready?.parentFile?.deleteRecursively(); ready = null
+                    if (android.os.Build.VERSION.SDK_INT >= 33 && checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED)
+                        requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 20)
+                    try {
+                        DownloadService.forgetCompleted()
+                        startForegroundService(Intent(this, DownloadService::class.java).apply {
+                            putExtra("mediaJson", MediaTransfer.encode(found)); putExtra("choiceJson", MediaTransfer.choice(selected).toString())
+                            putExtra("url", found.url); putExtra("title", found.title); putExtra("thumbnail", found.thumbnail)
+                            putExtra("selector", selected.selector); putExtra("label", selected.label)
+                            putExtra("audio", selected.audio); putExtra("mp3", selected.mp3)
+                            putExtra("extractAudio", selected.extractAudio); putExtra("english", english)
+                            putExtra("format", selected.format); putExtra("bitrate", selected.bitrate)
+                            putExtra("metadata", selected.metadata); putExtra("cover", selected.cover)
+                        })
+                        followingDownload = true; busy = true; saved = false; lastError = ""
+                        refresh(); status.text = text("Готовим файл. Можно свернуть приложение.", "Preparing file. You can leave the app.")
+                    } catch (e: Exception) { lastError = e.message.orEmpty(); refresh() }
+                }
             }
         }
         resultCard = LinearLayout(this).apply {
@@ -354,6 +362,7 @@ class MainActivity : Activity() {
             exportTitle = media?.title ?: "Flow"
             exportMime = mime
             exportThumbnail = media?.thumbnail.orEmpty()
+            exportSourceUrl = media?.url.orEmpty()
             if (android.os.Build.VERSION.SDK_INT >= 29) {
                 saveToMediaStore(file, exportTitle, mime)
                 return@button
@@ -409,6 +418,7 @@ class MainActivity : Activity() {
             if (DownloadService.state != null) { followingDownload = true; syncDownload() }
             refresh()
         }
+        checkStartupUpdate()
     }
     private fun switchMode(next: Boolean) {
         if (audio == next) return
@@ -460,7 +470,7 @@ class MainActivity : Activity() {
         qualityLabel.text = if (audio) text("Формат аудио", "Audio format") else text("Качество видео", "Video quality")
         input.hint = text("Вставьте ссылку YouTube", "Paste a YouTube link")
         analyze.text = text("Показать варианты", "Show options")
-        download.text = text("↓  Подготовить файл", "↓  Prepare download")
+        download.text = if (checkingDuplicate) text("Проверяем загрузки…", "Checking downloads…") else text("↓  Подготовить файл", "↓  Prepare download")
         editInfo.text = text("Название и файл  ›", "Title and file  ›")
         editInfo.isEnabled = !busy && ready == null && !saved
         style(editInfo, false)
@@ -472,7 +482,7 @@ class MainActivity : Activity() {
         analyze.isEnabled = !busy && input.text.isNotBlank()
         spinner.isEnabled = !busy && choices.isNotEmpty()
         refreshExportOptions()
-        download.isEnabled = !busy && choices.isNotEmpty()
+        download.isEnabled = !busy && !checkingDuplicate && choices.isNotEmpty()
         save.visibility = if (ready != null && !busy && !saved) View.VISIBLE else View.GONE
         save.isEnabled = !busy && !saved
         title.visibility = if (media != null) View.VISIBLE else View.GONE
@@ -551,6 +561,69 @@ class MainActivity : Activity() {
         dialog.show()
     }
 
+    private fun checkDuplicate(found: Media, audio: Boolean, proceed: () -> Unit) {
+        if (checkingDuplicate || busy) return
+        checkingDuplicate = true; refresh()
+        worker.execute {
+            val existing = DownloadHistory(applicationContext).duplicate(found, audio) { item ->
+                contentResolver.openAssetFileDescriptor(android.net.Uri.parse(item.uri), "r")?.use { true } ?: false
+            }
+            runOnUiThread {
+                checkingDuplicate = false
+                if (isDestroyed || isFinishing) return@runOnUiThread
+                refresh()
+                if (media !== found || this.audio != audio || busy) return@runOnUiThread
+                if (existing == null) { proceed(); return@runOnUiThread }
+                duplicateDialog?.dismiss()
+                duplicateDialog = AlertDialog.Builder(this)
+                    .setTitle(text("Уже скачано", "Already downloaded"))
+                    .setMessage(text("Этот ${if (audio) "аудиофайл" else "ролик"} уже есть на устройстве:\n${existing.title}\n\nСкачать ещё одну копию?",
+                        "This ${if (audio) "audio" else "video"} is already on your device:\n${existing.title}\n\nDownload another copy?"))
+                    .setPositiveButton(text("Скачать ещё раз", "Download again")) { _, _ -> proceed() }
+                    .setNeutralButton(text("Открыть", "Open")) { _, _ ->
+                        runCatching { startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(android.net.Uri.parse(existing.uri), existing.mime)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)) }
+                            .onFailure { Toast.makeText(this, text("Не удалось открыть файл", "Could not open file"), Toast.LENGTH_SHORT).show() }
+                    }
+                    .setNegativeButton(text("Отмена", "Cancel"), null).show()
+            }
+        }
+    }
+    private fun checkStartupUpdate() {
+        val prefs = getSharedPreferences("updates", 0)
+        val now = System.currentTimeMillis()
+        if (now - prefs.getLong("checked", 0) < 86_400_000L) return
+        prefs.edit().putLong("checked", now).apply()
+        updateWorker.execute {
+            val release = runCatching { AppUpdates.latest() }.getOrNull() ?: return@execute
+            val installed = packageManager.getPackageInfo(packageName, 0).versionName.orEmpty()
+            if (!runCatching { AppUpdates.isNewer(release.version, installed) }.getOrDefault(false)) return@execute
+            runOnUiThread {
+                if (isDestroyed || isFinishing || (prefs.getString("dismissed", "") == release.version &&
+                    System.currentTimeMillis() - prefs.getLong("dismissedAt", 0) < 86_400_000L)) return@runOnUiThread
+                val notice = LinearLayout(this).apply {
+                    orientation = LinearLayout.VERTICAL; background = surface()
+                    setPadding(dp(12), dp(8), dp(12), dp(8))
+                    addView(TextView(this@MainActivity).apply {
+                        text = text("Доступна Flow ${release.version}", "Flow ${release.version} is available")
+                        textSize = 14f; setTextColor(palette.text)
+                    })
+                    val actions = LinearLayout(this@MainActivity)
+                    actions.addView(Button(this@MainActivity).apply {
+                        text = text("Обновить", "Update"); isAllCaps = false; style(this, true)
+                        setOnClickListener { startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(release.url))) }
+                    }, LinearLayout.LayoutParams(0, dp(48), 1f))
+                    actions.addView(Button(this@MainActivity).apply {
+                        text = text("Позже", "Later"); isAllCaps = false; style(this, false)
+                        setOnClickListener { prefs.edit().putString("dismissed", release.version).putLong("dismissedAt", System.currentTimeMillis()).apply(); updateNotice?.let { root.removeView(it) }; updateNotice = null }
+                    }, LinearLayout.LayoutParams(0, dp(48), 1f).apply { leftMargin = dp(8) })
+                    addView(actions, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+                }
+                updateNotice = notice
+                root.addView(notice, 1, LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(12) })
+            }
+        }
+    }
     private fun showMediaEditor() {
         val original = media ?: return
         if (busy || ready != null || saved) return
@@ -1084,6 +1157,7 @@ class MainActivity : Activity() {
         status.text = text("Сохраняем в папку устройства…", "Saving to your device folders…")
         val safeTitle = MediaStorage.safeName(rawTitle)
         val displayName = MediaStorage.displayName(media ?: Media("", rawTitle, emptyList()), file.extension)
+        val sourceUrl = media?.url.orEmpty()
         val extension = file.extension.lowercase()
         val collection = if (mime.startsWith("audio/")) android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
             else android.provider.MediaStore.Video.Media.EXTERNAL_CONTENT_URI
@@ -1103,7 +1177,7 @@ class MainActivity : Activity() {
                 check(contentResolver.update(uri!!, android.content.ContentValues().apply {
                     put(android.provider.MediaStore.MediaColumns.IS_PENDING, 0)
                 }, null, null) == 1) { "Could not finish media file" }
-                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), safeTitle, mime, file.length(), System.currentTimeMillis(), exportThumbnail))
+                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), safeTitle, mime, file.length(), System.currentTimeMillis(), exportThumbnail, sourceUrl))
                 DownloadService.markSaved(file, uri.toString())
                 runOnUiThread { if (!isDestroyed) saved = true }
             } catch (e: Exception) {
@@ -1213,7 +1287,7 @@ class MainActivity : Activity() {
                     contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
             }.isSuccess
             val recorded = runCatching {
-                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), savedTitle, savedMime, file.length(), System.currentTimeMillis(), savedThumbnail))
+                DownloadHistory(applicationContext).add(SavedDownload(uri.toString(), savedTitle, savedMime, file.length(), System.currentTimeMillis(), savedThumbnail, exportSourceUrl))
             }.isSuccess
             runOnUiThread {
                 saved = true
@@ -1250,6 +1324,7 @@ class MainActivity : Activity() {
         super.onSaveInstanceState(outState)
     }
     override fun onDestroy() {
+        duplicateDialog?.dismiss()
         infoDialog?.dismiss()
         cancelDialog?.dismiss()
         appSettingsDialog?.dismiss()
@@ -1258,6 +1333,7 @@ class MainActivity : Activity() {
         super.onDestroy()
         worker.shutdownNow()
         imageWorker.shutdownNow()
+        updateWorker.shutdownNow()
         main.removeCallbacks(downloadPoll)
         if (DownloadService.state?.running != true)
             Thread { com.yausername.youtubedl_android.YoutubeDL.getInstance().destroyProcessById("flow-analyze") }.start()

@@ -40,7 +40,7 @@ object MediaStorage {
             resolver.openOutputStream(uri, "w")?.use { output -> file.inputStream().use { it.copyTo(output) } }
                 ?: error("Could not open media destination")
             check(resolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null) == 1)
-            DownloadHistory(context).add(SavedDownload(uri.toString(), title, mime, file.length(), System.currentTimeMillis(), media.thumbnail))
+            DownloadHistory(context).add(SavedDownload(uri.toString(), title, mime, file.length(), System.currentTimeMillis(), media.thumbnail, media.url))
             return uri.toString()
         } catch (e: Exception) {
             runCatching { resolver.delete(uri, null, null) }
